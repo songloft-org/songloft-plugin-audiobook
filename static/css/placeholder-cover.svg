@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6750a4"/>
+      <stop offset="100%" stop-color="#7d5260"/>
+    </linearGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#g)"/>
+  <g fill="#eaddff" opacity="0.9">
+    <circle cx="150" cy="150" r="48" fill="none" stroke="#eaddff" stroke-width="6"/>
+    <circle cx="150" cy="150" r="24"/>
+    <path d="M 88 260 Q 150 200 212 260" fill="none" stroke="#eaddff" stroke-width="6" stroke-linecap="round"/>
+    <text x="150" y="340" font-family="system-ui, sans-serif" font-size="28" font-weight="600" text-anchor="middle" fill="#eaddff">有声书</text>
+  </g>
+</svg>
