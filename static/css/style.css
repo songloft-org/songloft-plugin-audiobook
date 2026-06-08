@@ -251,55 +251,92 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .book-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
   padding: 12px 0;
+}
+
+@media (max-width: 480px) {
+  .book-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
 }
 
 .book-card {
   cursor: pointer;
-  transition: transform .15s;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+  transition: transform .15s, box-shadow .2s;
 }
-.book-card:hover { transform: translateY(-2px); }
+.book-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
 .book-card-cover {
   position: relative;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  border-radius: var(--radius);
+  aspect-ratio: 1;
   overflow: hidden;
   background: var(--surface-2);
-  box-shadow: var(--shadow);
-  transition: box-shadow .2s;
 }
-.book-card:hover .book-card-cover { box-shadow: var(--shadow-lg); }
 .book-card-cover img {
   width: 100%; height: 100%;
   object-fit: cover;
 }
+
+/* 底部渐变 + 书名覆盖层 */
+.book-card-overlay {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 32px 8px 8px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.7));
+}
+.book-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+.book-card-meta {
+  font-size: 11px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
 .book-card-play {
   position: absolute;
-  right: 8px; bottom: 8px;
-  width: 40px; height: 40px;
+  right: 8px; top: 8px;
+  width: 36px; height: 36px;
   border-radius: 50%;
   background: var(--primary);
   color: var(--on-primary);
   display: grid; place-items: center;
   font-size: 14px;
   opacity: 0;
-  transform: translateY(8px);
-  transition: opacity .2s, transform .2s;
+  transition: opacity .2s;
   box-shadow: var(--shadow-lg);
 }
-.book-card:hover .book-card-play {
-  opacity: 1; transform: translateY(0);
-}
+.book-card:hover .book-card-play { opacity: 1; }
+
 .book-card-fav {
   position: absolute;
-  top: 8px; right: 8px;
+  top: 8px; left: 8px;
   width: 28px; height: 28px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.85);
-  color: var(--danger);
+  background: rgba(0,0,0,0.45);
+  color: #ffd000;
   display: grid; place-items: center;
   font-size: 14px;
   opacity: 0;
@@ -308,26 +345,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .book-card:hover .book-card-fav,
 .book-card-fav.on { opacity: 1; }
 
-.book-card-info { padding: 10px 4px 0; }
-.book-card-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  line-height: 1.35;
-  min-height: 38px;
-}
-.book-card-meta {
-  font-size: 12px;
-  color: var(--text-3);
-  margin-top: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.book-card-info { display: none; }
 
 /* ========== 空状态 ========== */
 .empty-state {

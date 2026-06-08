@@ -82,7 +82,7 @@ npm run validate     # 验证 plugin.json 中的 hash
 
 `plugin.json` 关键字段：
 - `entryPath: "audiobook"` — 决定宿主路由前缀 `/api/v1/jsplugin/audiobook/`
-- `permissions: ["storage", "fs"]` — 声明所需权限
+- `permissions: ["storage", "fs"]` — 声明所需权限（fs 为宿主文件系统访问，builder 需修补以接受此权限）
 - `main` / `entryHash` / `zipHash` — 由 `songloft-plugin build` 自动填充
 
 ## Git 提交约定
