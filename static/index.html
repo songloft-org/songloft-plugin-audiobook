@@ -73,7 +73,7 @@
             <div class="empty-icon">📚</div>
             <div class="empty-title">还没有有声书</div>
             <div class="empty-hint">
-              把你的有声书配置挂载为服务器的
+              把你的有声书放在服务器的
               <code>/app/data/jsplugins_data/audiobook/library/</code>
               目录下，然后点击右上角「重新扫描」。
               <br /><br />
@@ -105,30 +105,60 @@
         <button class="back-btn" id="backBtn">← 返回</button>
         <div id="bookDetail" class="book-detail"></div>
       </section>
+
+      <!-- 播放器视图 -->
+      <section id="playerView" class="view">
+        <div class="player-full">
+          <button class="back-btn" id="playerBackBtn">← 返回</button>
+          <div class="player-hero">
+            <div class="player-disc" id="playerDisc">
+              <img id="playerDiscCover" src="" alt="" />
+              <div class="player-disc-placeholder" id="playerDiscPlaceholder">🎧</div>
+            </div>
+          </div>
+          <div class="player-full-info">
+            <div class="player-full-book" id="playerFullBook">书名</div>
+            <div class="player-full-chapter" id="playerFullChapter">章节</div>
+          </div>
+          <div class="player-full-progress">
+            <span class="time" id="playerFullCur">00:00</span>
+            <input type="range" id="playerFullSeek" min="0" max="100" step="0.1" value="0" aria-label="播放进度" />
+            <span class="time" id="playerFullDur">00:00</span>
+          </div>
+          <div class="player-full-controls">
+            <button class="icon-btn" id="btnRewind" title="后退 15 秒">⏪</button>
+            <button class="icon-btn" id="btnPrevFull" title="上一章">⏮</button>
+            <button class="icon-btn play-btn" id="btnPlayFull" title="播放/暂停">▶</button>
+            <button class="icon-btn" id="btnNextFull" title="下一章">⏭</button>
+            <button class="icon-btn" id="btnForward" title="前进 15 秒">⏩</button>
+          </div>
+          <div class="player-full-extra">
+            <button class="btn btn-ghost" id="btnSpeedFull">1.0x</button>
+            <button class="btn btn-ghost" id="btnPlaylist">📋 播放列表</button>
+          </div>
+        </div>
+      </section>
     </main>
 
-    <!-- 底部播放栏 -->
-    <div class="player-bar" id="playerBar" hidden>
-      <button class="player-cover-btn" id="playerCoverBtn" title="查看详情">
-        <img id="playerCover" src="" alt="封面" />
-      </button>
-      <div class="player-info">
-        <div class="player-book" id="playerBook">书名</div>
-        <div class="player-chapter" id="playerChapter">章节</div>
+    <!-- 播放列表弹窗 -->
+    <div class="playlist-overlay" id="playlistOverlay" hidden>
+      <div class="playlist-sheet">
+        <div class="playlist-sheet-header">
+          <span>播放列表</span>
+          <button class="btn btn-ghost" id="btnPlaylistClose">✕</button>
+        </div>
+        <div class="playlist-sheet-body" id="playlistSheetBody"></div>
       </div>
-      <div class="player-progress-wrap">
-        <span class="time" id="playerCurTime">00:00</span>
-        <input type="range" id="playerSeek" min="0" max="100" step="0.1" value="0" aria-label="播放进度" />
-        <span class="time" id="playerDurTime">00:00</span>
-      </div>
-      <div class="player-controls">
-        <button class="icon-btn" id="btnPrev" title="上一章">⏮</button>
-        <button class="icon-btn play" id="btnPlay" title="播放/暂停">▶</button>
-        <button class="icon-btn" id="btnNext" title="下一章">⏭</button>
-        <button class="icon-btn speed" id="btnSpeed" title="倍速">1.0x</button>
-      </div>
-      <audio id="audio" preload="metadata"></audio>
     </div>
+
+    <!-- 悬浮播放器 FAB -->
+    <div class="player-fab" id="playerFab" hidden>
+      <img id="playerFabCover" src="" alt="" />
+      <div class="player-fab-placeholder" id="playerFabPlaceholder">🎧</div>
+      <div class="player-fab-ring"></div>
+    </div>
+
+    <audio id="audio" preload="metadata"></audio>
 
     <!-- Toast -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
