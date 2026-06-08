@@ -2,10 +2,22 @@
 
 import { createRouter } from '@songloft/plugin-sdk';
 import type { HTTPRequest } from '@songloft/plugin-sdk';
-import { parseQuery, jsonResponse, errorResponse, getMimeFromExt } from '../utils/helpers';
+import { parseQuery, jsonResponse, errorResponse, getMimeFromExt, getImageMime } from '../utils/helpers';
 import { BookManager } from '../services/bookManager';
 
 type AppRouter = ReturnType<typeof createRouter>;
+
+/** 将相对封面路径解析为 data URI */
+async function resolveCoverUrl(relPath: string | null): Promise<string | null> {
+  if (!relPath) return null;
+  try {
+    const base64 = await songloft.fs.readFile(relPath, { encoding: 'base64' });
+    const mime = getImageMime(relPath);
+    return `data:${mime};base64,${base64}`;
+  } catch {
+    return null;
+  }
+}
 
 /** 注册所有 API 路由到 router */
 export function registerHandlers(router: AppRouter, bm: BookManager): void {
@@ -17,13 +29,14 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       pageSize: parseInt(q.pageSize || '24', 10),
       keyword: q.keyword,
       category: q.category,
-      favoritesOnly: q.favorites === '1' || q.favorites === 'true',
+      favoritesOnly: q.favoritesOnly === '1' || q.favoritesOnly === 'true',
       sortBy: (q.sortBy as any) || 'updatedAt',
     });
-    const booksWithMeta = result.books.map((b) => ({
+    const booksWithMeta = await Promise.all(result.books.map(async (b) => ({
       ...b,
+      coverUrl: await resolveCoverUrl(b.coverUrl),
       isFavorite: bm.isFavorite(b.id),
-    }));
+    })));
     return jsonResponse({
       success: true,
       data: { ...result, books: booksWithMeta },
@@ -46,8 +59,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
   // ---------- GET /api/recently-played —— 最近播放 ----------
   router.get('/api/recently-played', async () => {
     const recent = bm.getRecentlyPlayed();
-    const enriched = recent
-      .map((item) => {
+    const enriched = (await Promise.all(recent.map(async (item) => {
         const book = bm.getBookById(item.bookId);
         if (!book) return null;
         const chapter = book.chapters.find((c) => c.id === item.chapterId);
@@ -57,10 +69,10 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
           at: item.at,
           bookTitle: book.title,
           chapterTitle: chapter?.title || '',
-          coverUrl: book.coverUrl,
+          coverUrl: await resolveCoverUrl(book.coverUrl),
           fileRelPath: chapter?.fileRelPath || '',
         };
-      })
+      })))
       .filter((x) => x !== null);
     return jsonResponse({ success: true, data: { items: enriched } });
   });
@@ -83,6 +95,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       success: true,
       data: {
         ...book,
+        coverUrl: await resolveCoverUrl(book.coverUrl),
         chapters: book.chapters.map((c) => ({
           ...c,
           progress: bm.getProgress(book.id, c.id),
@@ -150,7 +163,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       if (!chapter) return errorResponse('未找到章节', 404);
 
       try {
-        const base64 = await (songloft as any).fs.readFile(chapter.fileRelPath, { encoding: 'base64' });
+        const base64 = await songloft.fs.readFile(chapter.fileRelPath, { encoding: 'base64' });
         const mime = getMimeFromExt(chapter.fileRelPath);
         return jsonResponse({
           success: true,

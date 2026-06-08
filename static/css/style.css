@@ -338,7 +338,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   opacity: 0;
   transition: opacity .2s;
 }
-.book-card:hover .book-card-fav,
 .book-card-fav.on { opacity: 1; }
 
 .book-card-info { display: none; }
@@ -377,6 +376,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   gap: 16px;
   margin-top: 24px;
 }
+.pagination[hidden] { display: none; }
 .page-info { color: var(--text-3); font-size: 13px; }
 
 /* ========== 通用图标按钮 ========== */
@@ -487,6 +487,15 @@ input[type="range"]::-moz-range-thumb {
   font-weight: 600;
   color: var(--text);
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chapter-sort-btn {
+  font-size: 13px;
+  padding: 4px 10px;
+  white-space: nowrap;
 }
 .chapter-list-body { padding: 4px 0; }
 

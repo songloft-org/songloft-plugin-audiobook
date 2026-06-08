@@ -34,12 +34,12 @@ export function switchView(id) {
     fab.style.display = hide ? 'none' : '';
   }
 
-  // 顶部栏、标签、排序栏只在首页显示
+  // 顶部栏、标签、排序栏只在首页显示，且仅在有数据时显示排序栏
   const isHome = id === 'homeView';
   const header = document.querySelector('.app-header');
   const tabs = document.getElementById('tabs');
   const sortBar = document.querySelector('.sort-bar');
   if (header) header.style.display = isHome ? '' : 'none';
   if (tabs) tabs.style.display = isHome ? '' : 'none';
-  if (sortBar) sortBar.style.display = isHome ? '' : 'none';
+  if (sortBar) sortBar.style.display = (isHome && state.total > 0) ? '' : 'none';
 }

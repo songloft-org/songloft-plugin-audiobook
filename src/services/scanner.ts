@@ -11,17 +11,6 @@ import {
   estimateDurationFromSize,
 } from '../utils/helpers';
 
-// songloft.fs 不是 SDK 官方类型，这里用 any 访问
-declare global {
-  interface Songloft {
-    fs: {
-      readdir(path: string): Promise<Array<{ name: string; isDir: boolean }>>;
-      stat(path: string): Promise<{ size: number; modTime: number; isDir: boolean }>;
-      readFile(path: string, options?: { encoding: string }): Promise<string>;
-    };
-  }
-}
-
 interface ScannerState {
   libraryPath: string;
   books: Book[];

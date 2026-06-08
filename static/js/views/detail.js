@@ -24,6 +24,11 @@ export function renderBookDetail(book) {
   const el = document.getElementById('bookDetail');
   if (!el) return;
   const hasCover = !!book.coverUrl;
+
+  const chapters = [...book.chapters].sort((a, b) =>
+    state.chapterSortOrder === 'asc' ? a.index - b.index : b.index - a.index
+  );
+
   el.innerHTML = `
     <div class="book-hero">
       ${hasCover
@@ -40,9 +45,12 @@ export function renderBookDetail(book) {
       </div>
     </div>
     <div class="chapter-list">
-      <div class="chapter-list-header">章节列表（${book.chapters.length}）</div>
+      <div class="chapter-list-header">
+        章节列表（${book.chapters.length}）
+        <button class="btn btn-ghost chapter-sort-btn" id="chapterSortToggle">${state.chapterSortOrder === 'asc' ? '↑ 正序' : '↓ 倒序'}</button>
+      </div>
       <div class="chapter-list-body">
-        ${book.chapters.map((ch) => `
+        ${chapters.map((ch) => `
           <div class="chapter-row" data-chapter="${ch.id}">
             <div class="chapter-row-left">
               <div class="chapter-index">${String(ch.index).padStart(3, '0')}</div>
@@ -62,6 +70,11 @@ export function renderBookDetail(book) {
       </div>
     </div>
   `;
+
+  document.getElementById('chapterSortToggle').addEventListener('click', () => {
+    state.chapterSortOrder = state.chapterSortOrder === 'asc' ? 'desc' : 'asc';
+    renderBookDetail(book);
+  });
 
   document.getElementById('btnPlayFirst').addEventListener('click', () => {
     if (state.currentBook && state.currentBook.chapters.length) {

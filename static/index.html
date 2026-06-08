@@ -29,7 +29,7 @@
       </div>
 
       <div class="actions">
-        <button id="btnRescan" class="btn btn-ghost" title="重新扫描本地目录">🔄</button>
+        <button id="btnRescan" class="btn btn-ghost" title="重新扫描本地目录">加载</button>
       </div>
     </header>
 
@@ -70,26 +70,26 @@
           <h2 class="section-title" id="booksSectionTitle">全部书籍</h2>
           <div class="book-grid" id="bookGrid" aria-live="polite"></div>
           <div id="emptyState" class="empty-state" hidden>
+            <div class="empty-title" style="font-weight: bold; font-size: 1.2em;">资源未找到！</div>
             <div class="empty-icon">📚</div>
-            <div class="empty-title">还没有有声书</div>
             <div class="empty-hint">
-              把你的有声书放在服务器的
+              请把有声书放在服务所在的
               <code>/app/data/jsplugins_data/audiobook/library/</code>
-              目录下，然后点击右上角「重新扫描」。
+              目录下，然后点击右上角「加载」。
               <br /><br />
               目录结构示例：
               <pre>library/
 ├── 三体/
-│   ├── cover.jpg
+│   ├── cover.jpg（封面图）
 │   ├── 第001集.mp3
 │   ├── 第002集.mp3
-│   └── description.txt
+│   └── description.txt（描述、简介）
 └── 明朝那些事儿/
-    ├── folder.jpg
+    ├── folder.jpg（封面图）
     ├── 第一章.mp3
     └── 第二章.mp3</pre>
             </div>
-            <button class="btn btn-primary" onclick="app.loadSnapshot()">尝试重新加载</button>
+            <button class="btn btn-primary" onclick="app.loadSnapshot()">重新加载</button>
           </div>
           <!-- 分页 -->
           <div class="pagination" id="pagination" hidden>

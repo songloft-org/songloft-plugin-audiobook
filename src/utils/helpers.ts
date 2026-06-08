@@ -86,6 +86,28 @@ export function isDescFile(name: string): boolean {
   return DESC_NAMES.has(name.toLowerCase());
 }
 
+/** 根据图片扩展名返回 MIME 类型 */
+export function getImageMime(name: string): string {
+  const ext = getExt(name);
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.webp':
+      return 'image/webp';
+    case '.gif':
+      return 'image/gif';
+    case '.bmp':
+      return 'image/bmp';
+    case '.svg':
+      return 'image/svg+xml';
+    default:
+      return 'image/jpeg';
+  }
+}
+
 /** 根据扩展名返回 MIME 类型 */
 export function getMimeFromExt(name: string): string {
   const ext = getExt(name);

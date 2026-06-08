@@ -15,6 +15,8 @@ export async function loadSnapshot() {
       if (empty) empty.hidden = false;
       const summary = document.getElementById('resultSummary');
       if (summary) summary.textContent = '';
+      const sortBar = document.querySelector('.sort-bar');
+      if (sortBar) sortBar.style.display = 'none';
       const title = document.getElementById('booksSectionTitle');
       if (title) title.textContent = '全部书籍';
       return;
@@ -50,6 +52,8 @@ export async function loadBooks() {
     if (title) title.textContent = state.keyword ? `搜索: "${state.keyword}"` : '全部书籍';
     const empty = document.getElementById('emptyState');
     if (empty) empty.hidden = state.total > 0;
+    const sortBar = document.querySelector('.sort-bar');
+    if (sortBar) sortBar.style.display = state.total > 0 ? '' : 'none';
   } catch (e) {
     console.error(e);
     showToast('加载失败：' + e.message);
@@ -116,18 +120,24 @@ async function playBookFromCard(bookId) {
 
 export function renderPagination() {
   const el = document.getElementById('pagination');
+  const summary = document.getElementById('resultSummary');
   if (!el) return;
-  const totalPages = Math.max(1, Math.ceil(state.total / state.pageSize));
+
+  // 无资源或只有一页时隐藏分页按钮
+  if (state.total === 0) {
+    el.hidden = true;
+    if (summary) summary.textContent = '';
+    return;
+  }
   if (state.total <= state.pageSize) {
     el.hidden = true;
-    const summary = document.getElementById('resultSummary');
     if (summary) summary.textContent = `共 ${state.total} 本`;
     return;
   }
   el.hidden = false;
+  const totalPages = Math.ceil(state.total / state.pageSize);
   const info = document.getElementById('pageInfo');
   if (info) info.textContent = `第 ${state.page} / ${totalPages} 页`;
-  const summary = document.getElementById('resultSummary');
   if (summary) summary.textContent = `共 ${state.total} 本`;
   document.getElementById('prevPage').disabled = state.page <= 1;
   document.getElementById('nextPage').disabled = state.page >= totalPages;
@@ -173,6 +183,6 @@ export async function triggerRescan() {
   } catch (e) {
     showToast('扫描失败：' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+    if (btn) { btn.disabled = false; btn.textContent = '加载'; }
   }
 }
