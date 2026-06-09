@@ -1,6 +1,6 @@
 // 有声书插件 — 入口
 import { state, switchView } from './state.js';
-import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed } from './views/player.js';
+import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed } from './views/player.js';
 import { loadSnapshot, loadBooks, loadRecentlyPlayed, triggerRescan } from './views/home.js';
 
 // ==================== 绑定事件 ====================
@@ -51,6 +51,7 @@ function bindEvents() {
   // Playlist modal
   document.getElementById('btnPlaylist').addEventListener('click', togglePlaylistModal);
   document.getElementById('btnPlaylistClose').addEventListener('click', togglePlaylistModal);
+  document.getElementById('btnPlaylistSort').addEventListener('click', togglePlaylistSort);
   document.getElementById('playlistOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) togglePlaylistModal();
   });

@@ -169,7 +169,11 @@ export function renderPlaylistModal() {
   const body = document.getElementById('playlistSheetBody');
   if (!book || !body) return;
 
-  body.innerHTML = book.chapters.map((ch) => {
+  const sorted = [...book.chapters].sort((a, b) =>
+    state.playlistSortAsc ? a.index - b.index : b.index - a.index
+  );
+
+  body.innerHTML = sorted.map((ch) => {
     const isActive = state.currentChapter && ch.id === state.currentChapter.id;
     return `
       <div class="chapter-row ${isActive ? 'active' : ''}" data-chapter="${ch.id}">
@@ -186,6 +190,9 @@ export function renderPlaylistModal() {
       </div>
     `;
   }).join('');
+
+  const sortBtn = document.getElementById('btnPlaylistSort');
+  if (sortBtn) sortBtn.textContent = state.playlistSortAsc ? '↑ 正序' : '↓ 倒序';
 
   body.querySelectorAll('.chapter-row').forEach((row) => {
     row.addEventListener('click', () => {
@@ -213,6 +220,13 @@ export function togglePlaylistModal() {
 function closePlaylistModal() {
   const overlay = document.getElementById('playlistOverlay');
   if (overlay) overlay.hidden = true;
+}
+
+export function togglePlaylistSort() {
+  state.playlistSortAsc = !state.playlistSortAsc;
+  const btn = document.getElementById('btnPlaylistSort');
+  if (btn) btn.textContent = state.playlistSortAsc ? '↑ 正序' : '↓ 倒序';
+  renderPlaylistModal();
 }
 
 // ==================== 播放控制 ====================

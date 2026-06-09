@@ -254,8 +254,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 @media (max-width: 480px) {
   .book-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
 }
 
