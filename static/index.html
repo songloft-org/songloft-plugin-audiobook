@@ -73,10 +73,14 @@
             <div class="empty-title" style="font-weight: bold; font-size: 1.2em;">资源未找到！</div>
             <div class="empty-icon">📚</div>
             <div class="empty-hint">
-              请把有声书放在服务所在的
+              请通过 Docker 卷挂载将有声书资源映射到
               <code>/app/data/jsplugins_data/audiobook/library/</code>
               目录下，然后点击右上角「加载」。
               <br /><br />
+              Docker Compose 示例（建议以只读方式挂载，防止误删）：
+              <pre>volumes:
+  - /your/audiobooks:/app/data/jsplugins_data/audiobook/library<strong>:ro</strong></pre>
+              <br />
               目录结构示例：
               <pre>library/
 ├── 三体/
