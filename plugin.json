@@ -3,7 +3,7 @@
   "name": "有声书",
   "version": "1.0.0",
   "description": "本地有声书管理与播放：扫描本地有声书目录，提供分类展示、搜索、章节播放、播放进度与收藏功能。",
-  "author": "Boluofan",
+  "author": "MiMusic Team",
   "homepage": "",
   "license": "MIT",
   "entryPath": "audiobook",
