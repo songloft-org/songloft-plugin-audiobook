@@ -128,7 +128,7 @@ export function updatePlayState(playing) {
   const disc = document.getElementById('playerDisc');
   if (disc) disc.classList.toggle('playing', playing);
   const btn = document.getElementById('btnPlayFull');
-  if (btn) btn.textContent = playing ? '⏸' : '▶';
+  if (btn) btn.textContent = playing ? '⏸️' : '▶️';
 }
 
 // ==================== 全屏播放器页 ====================

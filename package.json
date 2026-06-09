@@ -8,11 +8,8 @@
     "validate": "songloft-plugin validate"
   },
   "devDependencies": {
-    "@songloft/plugin-builder": "^2.0.0-alpha.1",
-    "@songloft/plugin-sdk": "^2.0.0-alpha.1",
+    "@songloft/plugin-builder": "^2.3.3",
+    "@songloft/plugin-sdk": "^2.3.3",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "audiobook": "link:"
   }
 }

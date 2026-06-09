@@ -586,7 +586,6 @@ input[type="range"]::-moz-range-thumb {
   position: absolute; inset: -4px;
   border-radius: 50%;
   border: 3px solid var(--primary);
-  border-top-color: transparent;
   animation: fab-spin 2s linear infinite;
   opacity: 0;
   transition: opacity .3s;
@@ -701,16 +700,6 @@ input[type="range"]::-moz-range-thumb {
 .player-full-controls .icon-btn {
   width: 44px; height: 44px;
   font-size: 20px;
-}
-.player-full-controls .play-btn {
-  width: 64px; height: 64px;
-  font-size: 28px;
-  background: var(--primary);
-  color: var(--on-primary);
-}
-.player-full-controls .play-btn:hover {
-  filter: brightness(1.08);
-  background: var(--primary);
 }
 
 /* 额外选项（倍速等） */
