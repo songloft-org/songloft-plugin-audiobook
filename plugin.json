@@ -16,8 +16,8 @@
     "fs:external",
     "command"
   ],
-  "updateUrl": "https://raw.githubusercontent.com/boluofan/songloft-plugin-release/audiobook/plugin.json",
-  "download_url": "https://github.com/boluofan/songloft-plugin-release/releases/download/audiobook-v1.0.2/audiobook.jsplugin.zip",
+  "updateUrl": "https://raw.githubusercontent.com/mimusic-org/mimusic-jsplugin-releases/audiobook/plugin.json",
+  "download_url": "https://github.com/mimusic-org/mimusic-jsplugin-releases/releases/download/audiobook-v1.0.2/audiobook.jsplugin.zip",
   "entryHash": "",
   "zipHash": ""
 }
