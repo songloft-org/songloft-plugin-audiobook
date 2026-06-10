@@ -9,9 +9,15 @@
   "entryPath": "audiobook",
   "main": "main.js",
   "minHostVersion": "2.0.0",
-  "permissions": ["storage", "fs", "fs:music", "fs:external", "command"],
+  "permissions": [
+    "storage",
+    "fs",
+    "fs:music",
+    "fs:external",
+    "command"
+  ],
   "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-audiobook/main/plugin.json",
-  "download_url": "",
+  "download_url": "https://github.com/mimusic-org/mimusic-jsplugin-audiobook/releases/download/v1.0.0/audiobook.jsplugin.zip",
   "entryHash": "",
   "zipHash": ""
 }
