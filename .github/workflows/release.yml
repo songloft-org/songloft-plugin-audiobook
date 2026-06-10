@@ -107,6 +107,11 @@ jobs:
           fi
 
           cd public-repo
+
+          # Unset GITHUB_TOKEN extraheader injected by actions/checkout,
+          # otherwise git push uses it instead of the PAT in the remote URL
+          git config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+
           mkdir -p releases
           cp "../dist/${ZIP_NAME}" "releases/${ZIP_NAME}"
           cp "../plugin-for-public.json" "plugin.json"
