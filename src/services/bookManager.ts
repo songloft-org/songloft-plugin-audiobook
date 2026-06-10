@@ -254,6 +254,12 @@ export class BookManager {
     this.libraryPath = path;
     this.settings.libraryPath = path;
     await this.saveSettings();
+    // 路径变更后立即重新扫描
+    await this.rescan();
+  }
+
+  getLibraryPath(): string {
+    return this.libraryPath;
   }
 
   // ---------- 重新扫描 ----------

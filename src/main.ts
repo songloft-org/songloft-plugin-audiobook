@@ -3,12 +3,23 @@ import { createRouter } from '@songloft/plugin-sdk';
 import type { HTTPRequest, HTTPResponse } from '@songloft/plugin-sdk';
 import { BookManager } from './services/bookManager';
 import { registerHandlers } from './handlers/router';
+import { isFFmpegAvailable } from './services/transcoder';
 
 const router = createRouter();
 let bookManager: BookManager | null = null;
 
 async function onInit(): Promise<void> {
   songloft.log.info('有声书插件：初始化中...');
+
+  // 检测 ffmpeg 可用性（异步，不阻塞初始化）
+  isFFmpegAvailable().then((ok) => {
+    if (ok) {
+      songloft.log.info('有声书插件：ffmpeg 可用，支持 WMA 转码');
+    } else {
+      songloft.log.warn('有声书插件：ffmpeg 不可用，WMA 格式将无法播放');
+    }
+  }).catch(() => {});
+
   bookManager = new BookManager();
   await bookManager.init();
   registerHandlers(router, bookManager);

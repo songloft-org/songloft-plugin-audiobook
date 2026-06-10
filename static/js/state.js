@@ -9,7 +9,6 @@ export const state = {
   currentBook: null,
   currentChapter: null,
   currentBookForPlayer: null,
-  objectUrl: null,
   audioEl: null,
   speed: 1.0,
   previousView: 'homeView',

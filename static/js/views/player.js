@@ -50,7 +50,7 @@ export function ensureAudio() {
   return el;
 }
 
-export async function playChapter(book, chapter, switchToPlayer) {
+export function playChapter(book, chapter, switchToPlayer) {
   state.currentBookForPlayer = book;
   state.currentChapter = chapter;
 
@@ -66,32 +66,20 @@ export async function playChapter(book, chapter, switchToPlayer) {
   const audio = ensureAudio();
   updatePlayState(true);
 
+  // 使用 serveFile 直出：Go 层直接 http.ServeFile，无大小限制，支持 Range
+  let token = '';
   try {
-    const data = await api(`/api/books/${book.id}/chapters/${chapter.id}/audio`);
-    if (!data || !data.audio) throw new Error('服务端返回数据异常');
+    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+    token = auth.accessToken || '';
+  } catch (e) {}
 
-    const trimmed = data.audio.trim();
-    if (trimmed.startsWith('<') || trimmed.startsWith('<!')) {
-      throw new Error('音频加载失败：API 路径错误');
-    }
-
-    const binary = atob(trimmed);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const blob = new Blob([bytes], { type: data.mime || 'audio/mpeg' });
-    if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
-    state.objectUrl = URL.createObjectURL(blob);
-    audio.src = state.objectUrl;
-    audio.playbackRate = state.speed;
-    audio.play().catch((e) => {
-      const isWma = (data.mime || '').includes('wma');
-      showToast(isWma ? '浏览器不支持 WMA 格式' : '播放失败：' + e.message);
-      updatePlayState(false);
-    });
-  } catch (e) {
-    showToast('音频加载失败：' + e.message);
+  const url = `./api/books/${book.id}/chapters/${chapter.id}/audio`;
+  audio.src = token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
+  audio.playbackRate = state.speed;
+  audio.play().catch((e) => {
+    showToast('播放失败：' + e.message);
     updatePlayState(false);
-  }
+  });
 }
 
 function saveProgress(bookId, chapterId, position, duration) {

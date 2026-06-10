@@ -2,8 +2,9 @@
 
 import { createRouter } from '@songloft/plugin-sdk';
 import type { HTTPRequest } from '@songloft/plugin-sdk';
-import { parseQuery, jsonResponse, errorResponse, getMimeFromExt, getImageMime } from '../utils/helpers';
+import { parseQuery, jsonResponse, errorResponse, getImageMime } from '../utils/helpers';
 import { BookManager } from '../services/bookManager';
+import { ensurePlayablePath } from '../services/transcoder';
 
 type AppRouter = ReturnType<typeof createRouter>;
 
@@ -155,7 +156,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     }
   );
 
-  // ---------- GET /api/books/:id/chapters/:chapterId/audio —— 音频文件（base64） ----------
+  // ---------- GET /api/books/:id/chapters/:chapterId/audio —— 音频文件（serveFile 直出） ----------
   router.get(
     '/api/books/:id/chapters/:chapterId/audio',
     async (req: HTTPRequest, params: Record<string, string>) => {
@@ -163,20 +164,9 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       if (!chapter) return errorResponse('未找到章节', 404);
 
       try {
-        const base64 = await songloft.fs.readFile(chapter.fileRelPath, { encoding: 'base64' });
-        const mime = getMimeFromExt(chapter.fileRelPath);
-        return jsonResponse({
-          success: true,
-          data: {
-            audio: base64,
-            mime,
-            chapterId: chapter.id,
-            bookId: params.id,
-            title: chapter.title,
-            duration: chapter.duration,
-            size: chapter.fileSize,
-          },
-        });
+        const playablePath = await ensurePlayablePath(chapter.fileRelPath);
+        // 由 Go 层直接 http.ServeFile，零拷贝、无大小限制、原生支持 Range
+        return { serveFile: { filePath: playablePath } } as any;
       } catch (err) {
         songloft.log.warn(`音频读取失败: ${chapter.fileRelPath} (${String(err)})`);
         return errorResponse('音频文件读取失败', 500);

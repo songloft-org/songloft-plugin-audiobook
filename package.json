@@ -8,8 +8,8 @@
     "validate": "songloft-plugin validate"
   },
   "devDependencies": {
-    "@songloft/plugin-builder": "^2.3.3",
-    "@songloft/plugin-sdk": "^2.3.3",
+    "@songloft/plugin-builder": "^2.4.4",
+    "@songloft/plugin-sdk": "^2.4.4",
     "typescript": "^5.9.3"
   }
 }
