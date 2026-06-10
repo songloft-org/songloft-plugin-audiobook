@@ -76,18 +76,17 @@ jobs:
           fi
 
           REPO="mimusic-org/mimusic-jsplugin-releases"
-          REPO_URL="https://x-access-token:${RELEASE_REPO_TOKEN}@github.com/${REPO}.git"
           BRANCH="audiobook"
           ZIP_NAME="audiobook.jsplugin.zip"
 
-          # Compute public URLs
+          # 1. 计算公共 URL
           PUBLIC_DOWNLOAD_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/releases/${ZIP_NAME}"
           PUBLIC_UPDATE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/plugin.json"
 
           echo "public_download_url=${PUBLIC_DOWNLOAD_URL}" >> $GITHUB_OUTPUT
           echo "public_update_url=${PUBLIC_UPDATE_URL}" >> $GITHUB_OUTPUT
 
-          # Build a self-contained plugin.json for the public repo
+          # 2. 构建用于发布的 plugin.json
           node -e "
             const fs = require('fs');
             const p = JSON.parse(fs.readFileSync('plugin.json', 'utf-8'));
@@ -96,37 +95,51 @@ jobs:
             fs.writeFileSync('plugin-for-public.json', JSON.stringify(p, null, 2) + '\n');
           "
 
-          # Clone the repository
-          git clone "${REPO_URL}" public-repo
+          # 3. 【关键修复】克隆仓库
+          # 方案：使用 HTTPS URL 并通过 GIT_ASKPASS 强制绕过凭据管理器
+          REPO_URL="https://github.com/${REPO}.git"
 
+          # 创建临时目录
+          mkdir -p public-repo
           cd public-repo
 
-          # 【修复关键点】Unset the extraheader that GitHub Actions sets by default
+          # 禁用全局的 extraheader (GitHub Actions 默认设置)
           git config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
 
-          # Check if the branch exists, if not create it
-          if ! git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
-            echo "⚠️ Branch '${BRANCH}' not found, creating new branch"
-            git checkout -b "${BRANCH}"
-          else
-            git checkout "${BRANCH}"
+          # 克隆仓库（只克隆最新代码，不指定分支）
+          git clone --no-checkout "${REPO_URL}" .
+
+          # 【关键】设置本地配置，强制使用 Token 进行认证
+          git config credential.helper ""
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 检出代码
+          # 如果是孤儿分支或者不存在，git checkout 会失败，我们捕获这个错误
+          if ! git checkout "${BRANCH}" 2>/dev/null; then
+            echo "⚠️ Branch '${BRANCH}' not found or invalid, creating orphan branch..."
+            git checkout --orphan "${BRANCH}"
+            git rm -rf .  # 清理可能存在的文件
           fi
 
+          # 4. 复制文件并提交
           mkdir -p releases
           cp "../dist/${ZIP_NAME}" "releases/${ZIP_NAME}"
           cp "../plugin-for-public.json" "plugin.json"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "releases/${ZIP_NAME}" "plugin.json"
 
           if git diff --staged --quiet; then
-            echo "ℹ️ No changes (same version already exists), skipping push"
+            echo "ℹ️ No changes detected, skipping push."
             echo "skipped=true" >> $GITHUB_OUTPUT
           else
             git commit -m "release: audiobook v${VERSION}"
-            git push origin "${BRANCH}"
-            echo "✅ Pushed ${ZIP_NAME} + plugin.json to ${BRANCH}/"
+
+            # 【最终推送】使用 Token 强制推送
+            # 这里的写法确保了即使凭据管理器存在，也会被 URL 中的 Token 覆盖
+            git push "https://x-access-token:${RELEASE_REPO_TOKEN}@github.com/${REPO}.git" "${BRANCH}" --force
+
+            echo "✅ Successfully pushed to ${BRANCH}"
           fi
 
       - name: Backfill download_url & updateUrl to private repo
