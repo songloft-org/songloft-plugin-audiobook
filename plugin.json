@@ -10,7 +10,8 @@
   "main": "main.js",
   "minHostVersion": "2.0.0",
   "permissions": ["storage", "fs", "fs:music", "fs:external", "command"],
-  "updateUrl": "",
+  "updateUrl": "https://raw.githubusercontent.com/songloft-org/songloft-plugin-audiobook/main/plugin.json",
+  "download_url": "",
   "entryHash": "",
   "zipHash": ""
 }
