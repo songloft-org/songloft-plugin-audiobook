@@ -61,17 +61,99 @@ jobs:
           DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
           echo "download_url=${DOWNLOAD_URL}" >> $GITHUB_OUTPUT
 
-      - name: Backfill download_url and push
+
+      - name: Push to public release repo
+        id: public_repo
+        env:
+          RELEASE_REPO_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          DOWNLOAD_URL="${{ steps.create_release.outputs.download_url }}"
+          if [ -z "${RELEASE_REPO_TOKEN}" ]; then
+            echo "⚠️ RELEASE_REPO_TOKEN not set, skipping cross-repo push"
+            echo "skipped=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          REPO="mimusic-org/mimusic-jsplugin-releases"
+          REPO_URL="https://x-access-token:${RELEASE_REPO_TOKEN}@github.com/${REPO}.git"
+          BRANCH="audiobook"
+          ZIP_NAME="audiobook.jsplugin.zip"
+
+          # Compute public URLs
+          PUBLIC_DOWNLOAD_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/releases/${ZIP_NAME}"
+          PUBLIC_UPDATE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/plugin.json"
+
+          echo "public_download_url=${PUBLIC_DOWNLOAD_URL}" >> $GITHUB_OUTPUT
+          echo "public_update_url=${PUBLIC_UPDATE_URL}" >> $GITHUB_OUTPUT
+
+          # Build a self-contained plugin.json for the public repo
+          node -e "
+            const fs = require('fs');
+            const p = JSON.parse(fs.readFileSync('plugin.json', 'utf-8'));
+            p.download_url = '${PUBLIC_DOWNLOAD_URL}';
+            p.updateUrl = '${PUBLIC_UPDATE_URL}';
+            fs.writeFileSync('plugin-for-public.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+          # Try to clone the audiobook branch; create orphan branch if it doesn't exist
+          if ! git clone --depth=1 --branch "${BRANCH}" "${REPO_URL}" public-repo 2>/dev/null; then
+            echo "⚠️ Branch '${BRANCH}' not found, creating orphan branch"
+            git clone --depth=1 "${REPO_URL}" public-repo
+            cd public-repo
+            git checkout --orphan "${BRANCH}"
+            git rm -rf --quiet . 2>/dev/null || true
+            cd ..
+          fi
+
+          cd public-repo
+          mkdir -p releases
+          cp "../dist/${ZIP_NAME}" "releases/${ZIP_NAME}"
+          cp "../plugin-for-public.json" "plugin.json"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "releases/${ZIP_NAME}" "plugin.json"
+
+          if git diff --staged --quiet; then
+            echo "ℹ️ No changes (same version already exists), skipping push"
+            echo "skipped=true" >> $GITHUB_OUTPUT
+          else
+            git commit -m "release: audiobook v${VERSION}"
+            git push origin "${BRANCH}"
+            echo "✅ Pushed ${ZIP_NAME} + plugin.json to ${BRANCH}/"
+          fi
+
+      - name: Backfill download_url & updateUrl to private repo
+        run: |
+          # Prefer public repo URLs; fall back to private release if public push was skipped
+          PUBLIC_DL="${{ steps.public_repo.outputs.public_download_url }}"
+          PUBLIC_UP="${{ steps.public_repo.outputs.public_update_url }}"
+          PRIVATE_DL="${{ steps.create_release.outputs.download_url }}"
+
+          if [ -n "${PUBLIC_DL}" ]; then
+            DOWNLOAD_URL="${PUBLIC_DL}"
+            UPDATE_URL="${PUBLIC_UP}"
+            echo "Using public repo URLs"
+          else
+            DOWNLOAD_URL="${PRIVATE_DL}"
+            UPDATE_URL="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/plugin.json"
+            echo "⚠️ Public repo push skipped, using private repo URLs"
+          fi
+
+          echo "download_url=${DOWNLOAD_URL}"
+          echo "updateUrl=${UPDATE_URL}"
+
           node -e "
             const fs = require('fs');
             const p = JSON.parse(fs.readFileSync('plugin.json', 'utf-8'));
             p.download_url = '${DOWNLOAD_URL}';
+            p.updateUrl = '${UPDATE_URL}';
             fs.writeFileSync('plugin.json', JSON.stringify(p, null, 2) + '\n');
           "
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add plugin.json
-          git diff --staged --quiet || git commit -m "chore(release): add download_url for ${{ steps.version.outputs.tag }}"
+          git diff --staged --quiet || git commit -m "chore(release): backfill URLs for ${{ steps.version.outputs.tag }}"
           git push origin HEAD:${{ github.event.repository.default_branch }}
