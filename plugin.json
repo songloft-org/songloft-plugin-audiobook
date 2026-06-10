@@ -9,7 +9,7 @@
   "entryPath": "audiobook",
   "main": "main.js",
   "minHostVersion": "2.0.0",
-  "permissions": ["storage", "fs", "fs:music", "fs:external"],
+  "permissions": ["storage", "fs", "fs:music", "fs:external", "command"],
   "updateUrl": "",
   "entryHash": "",
   "zipHash": ""
