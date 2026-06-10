@@ -80,7 +80,8 @@ jobs:
           ZIP_NAME="audiobook.jsplugin.zip"
 
           # 1. 计算公共 URL
-          PUBLIC_DOWNLOAD_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/releases/${ZIP_NAME}"
+          RELEASE_TAG="audiobook-v${VERSION}"
+          PUBLIC_DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${RELEASE_TAG}/${ZIP_NAME}"
           PUBLIC_UPDATE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/plugin.json"
 
           echo "public_download_url=${PUBLIC_DOWNLOAD_URL}" >> $GITHUB_OUTPUT
@@ -141,6 +142,14 @@ jobs:
 
             echo "✅ Successfully pushed to ${BRANCH}"
           fi
+
+          # 5. 在目标仓库创建 GitHub Release
+          GH_TOKEN="${RELEASE_REPO_TOKEN}" gh release create "${RELEASE_TAG}" \
+            --repo "${REPO}" \
+            "../dist/${ZIP_NAME}" \
+            --title "有声书 v${VERSION}" \
+            --generate-notes \
+            || echo "⚠️ Release ${RELEASE_TAG} may already exist, skipping"
 
       - name: Backfill download_url & updateUrl to private repo
         env:
