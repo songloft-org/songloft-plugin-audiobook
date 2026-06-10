@@ -28,10 +28,11 @@ npm run validate     # 验证 plugin.json 中的 hash
 |-----------|------|
 | `src/services/bookManager.ts` | 核心管理器：内存索引 + `songloft.storage` 持久化，封装扫描、查询、收藏、播放进度、设置 |
 | `src/services/scanner.ts` | 本地文件扫描器：扫描 `library/<书名>/<章节.mp3>` 目录结构，构建索引，支持缓存 |
+| `src/services/transcoder.ts` | 音频转码器：WMA→MP3（ffmpeg，128kbps），转码缓存到 `.cache/transcode/`，仅在需要时触发 |
 | `src/handlers/router.ts` | HTTP 路由注册：使用 SDK 的 `createRouter()`，注册所有 `/api/*` 端点 |
 | `src/types.ts` | 核心类型：Book、Chapter、BookDetail、ChapterProgress、PluginSettings |
 | `src/utils/helpers.ts` | 工具函数：query 解析、JSON 响应、自然排序、文件类型判断、时长估算、hash 等 |
-| `static/` | 前端 SPA：`index.html` + `js/app.js` + `css/style.css` + `css/placeholder-cover.svg`，通过相对路径 `./api/*` 调用 API |
+| `static/` | 前端 SPA：`index.html` + 多模块 JS（`api.js`/`state.js`/`utils.js`/`views/`）+ `css/style.css`，通过相对路径 `./api/*` 调用 API |
 
 ### 插件 API 端点
 
@@ -42,12 +43,12 @@ npm run validate     # 验证 plugin.json 中的 hash
 | `/api/books` | GET | 书籍列表（分页、搜索、分类、排序、收藏过滤） |
 | `/api/categories` | GET | 分类与标签列表 |
 | `/api/snapshot` | GET | 整体状态快照（含设置） |
-| `/api/recently-played` | GET | 最近播放记录（最多 20 条，含书名/章节名） |
+| `/api/recently-played` | GET | 最近播放记录（最多 30 条，含书名/章节名） |
 | `/api/rescan` | POST | 触发重新扫描 |
 | `/api/books/:id` | GET | 书籍详情（含章节列表和各章节播放进度） |
 | `/api/books/:id/favorite` | GET/POST | 收藏状态查询/切换 |
 | `/api/books/:id/chapters/:chapterId/progress` | GET/POST | 播放进度查询/保存（position/duration，秒） |
-| `/api/books/:id/chapters/:chapterId/audio` | GET | 音频文件（base64 编码 + mime 类型） |
+| `/api/books/:id/chapters/:chapterId/audio` | GET | 音频文件（通过 `serveFile` 由宿主 Go 层提供，支持 Range 请求；WMA 自动转码） |
 
 ### 数据流
 
@@ -57,7 +58,7 @@ npm run validate     # 验证 plugin.json 中的 hash
   → BookManager 内存索引 (books[] + chaptersByBookId)
   → Router 提供 HTTP API
   → 前端 Vanilla JS SPA fetch 调用 API
-  → 音频通过 base64 → Blob URL → <audio> 播放
+  → 音频通过 serveFile (Go 层 http.ServeFile) 直传，支持 Range 请求
 ```
 
 ### 持久化键
@@ -69,7 +70,7 @@ npm run validate     # 验证 plugin.json 中的 hash
 ## 核心约束
 
 1. **QuickJS 沙盒**：只能通过 `songloft.*` 全局 API（`songloft.fs.readdir/stat/readFile`、`songloft.storage.get/set`、`songloft.log.*`）访问宿主
-2. **音频传输**：`songloft.fs.readFile(path, { encoding: 'base64' })` → base64 → 前端 Blob URL 播放，不支持流式
+2. **音频传输**：通过 `serveFile` 返回 `{ serveFile: { filePath } }`，由宿主 Go 层执行 `http.ServeFile`（支持 Range/206）；WMA 文件自动转码为 MP3 后再 serve
 3. **目录约定**：有声书放在 `data/jsplugins_data/audiobook/static/library/<书名>/<章节.mp3>`，每个子目录一本书，根目录散落音频归入"未分类"
 4. **章节排序**：自然排序（natural compare），正确处理 "第2集" < "第10集"
 5. **封面识别**：优先匹配 `cover.*` / `folder.*` / `封面.*`，未命中取第一个图片文件
@@ -82,7 +83,7 @@ npm run validate     # 验证 plugin.json 中的 hash
 
 `plugin.json` 关键字段：
 - `entryPath: "audiobook"` — 决定宿主路由前缀 `/api/v1/jsplugin/audiobook/`
-- `permissions: ["storage", "fs"]` — 声明所需权限（fs 为宿主文件系统访问，builder 需修补以接受此权限）
+- `permissions: ["storage", "fs", "fs:music", "fs:external", "command"]` — 声明所需权限（fs 为宿主文件系统访问，command 用于 ffmpeg 转码）
 - `main` / `entryHash` / `zipHash` — 由 `songloft-plugin build` 自动填充
 
 ## Git 提交约定
