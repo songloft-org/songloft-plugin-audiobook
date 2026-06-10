@@ -143,6 +143,8 @@ jobs:
           fi
 
       - name: Backfill download_url & updateUrl to private repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Prefer public repo URLs; fall back to private release if public push was skipped
           PUBLIC_DL="${{ steps.public_repo.outputs.public_download_url }}"
@@ -174,4 +176,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add plugin.json
           git diff --staged --quiet || git commit -m "chore(release): backfill URLs for ${{ steps.version.outputs.tag }}"
-          git push origin HEAD:${{ github.event.repository.default_branch }}
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:${{ github.event.repository.default_branch }}
