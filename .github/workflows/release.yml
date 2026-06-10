@@ -75,7 +75,7 @@ jobs:
             exit 0
           fi
 
-          REPO="boluofan/songloft-plugin-release"
+          REPO="mimusic-org/mimusic-jsplugin-releases"
           BRANCH="audiobook"
           ZIP_NAME="audiobook.jsplugin.zip"
 
