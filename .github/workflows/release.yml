@@ -96,21 +96,21 @@ jobs:
             fs.writeFileSync('plugin-for-public.json', JSON.stringify(p, null, 2) + '\n');
           "
 
-          # Try to clone the audiobook branch; create orphan branch if it doesn't exist
-          if ! git clone --depth=1 --branch "${BRANCH}" "${REPO_URL}" public-repo 2>/dev/null; then
-            echo "⚠️ Branch '${BRANCH}' not found, creating orphan branch"
-            git clone --depth=1 "${REPO_URL}" public-repo
-            cd public-repo
-            git checkout --orphan "${BRANCH}"
-            git rm -rf --quiet . 2>/dev/null || true
-            cd ..
-          fi
+          # Clone the repository
+          git clone "${REPO_URL}" public-repo
 
           cd public-repo
 
-          # Unset GITHUB_TOKEN extraheader injected by actions/checkout,
-          # otherwise git push uses it instead of the PAT in the remote URL
+          # 【修复关键点】Unset the extraheader that GitHub Actions sets by default
           git config --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+
+          # Check if the branch exists, if not create it
+          if ! git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+            echo "⚠️ Branch '${BRANCH}' not found, creating new branch"
+            git checkout -b "${BRANCH}"
+          else
+            git checkout "${BRANCH}"
+          fi
 
           mkdir -p releases
           cp "../dist/${ZIP_NAME}" "releases/${ZIP_NAME}"
