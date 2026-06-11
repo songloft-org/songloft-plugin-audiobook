@@ -6,6 +6,7 @@ import {
   saveLibraryIndex,
   loadLibraryIndex,
   getBookDetail,
+  DEFAULT_LIBRARY_PATH,
 } from './scanner';
 
 const STORAGE_KEY_SETTINGS = 'audiobook_settings_v1';
@@ -22,12 +23,10 @@ interface StateSnapshot {
 }
 
 export class BookManager {
-  private libraryPath = 'library';
   private books: Book[] = [];
   private chaptersByBookId: Record<string, Chapter[]> = {};
   private scannedAt = 0;
   private settings: PluginSettings = {
-    libraryPath: 'library',
     favorites: [],
     recentlyPlayed: [],
   };
@@ -45,7 +44,6 @@ export class BookManager {
     } catch {
       // ignore
     }
-    this.libraryPath = this.settings.libraryPath || 'library';
 
     // 2) 加载播放进度
     try {
@@ -65,7 +63,6 @@ export class BookManager {
       if (cached && cached.books && cached.books.length > 0) {
         this.books = cached.books;
         this.chaptersByBookId = cached.chaptersByBookId || {};
-        this.libraryPath = cached.libraryPath || this.libraryPath;
         songloft.log.info(`有声书插件：从缓存加载 ${this.books.length} 本书`);
       }
     } catch {
@@ -74,7 +71,7 @@ export class BookManager {
 
     // 4) 实时扫描（首次安装无缓存时必须有结果）
     try {
-      const state = await scanLibrary({ libraryPath: this.libraryPath });
+      const state = await scanLibrary();
       this.books = state.books;
       this.chaptersByBookId = state.chaptersByBookId;
       this.scannedAt = Date.now();
@@ -137,7 +134,6 @@ export class BookManager {
   getBookById(bookId: string): BookWithChapters | null {
     return getBookDetail(
       {
-        libraryPath: this.libraryPath,
         books: this.books,
         chaptersByBookId: this.chaptersByBookId,
       },
@@ -168,7 +164,7 @@ export class BookManager {
     return {
       books: this.books,
       totalBooks: this.books.length,
-      libraryPath: this.libraryPath,
+      libraryPath: DEFAULT_LIBRARY_PATH,
       categories: this.getCategories(),
       scannedAt: this.scannedAt,
       recentlyPlayed: this.settings.recentlyPlayed,
@@ -250,22 +246,10 @@ export class BookManager {
     }
   }
 
-  async setLibraryPath(path: string): Promise<void> {
-    this.libraryPath = path;
-    this.settings.libraryPath = path;
-    await this.saveSettings();
-    // 路径变更后立即重新扫描
-    await this.rescan();
-  }
-
-  getLibraryPath(): string {
-    return this.libraryPath;
-  }
-
   // ---------- 重新扫描 ----------
 
   async rescan(): Promise<{ totalBooks: number; totalChapters: number }> {
-    const state = await scanLibrary({ libraryPath: this.libraryPath });
+    const state = await scanLibrary();
     this.books = state.books;
     this.chaptersByBookId = state.chaptersByBookId;
     this.scannedAt = Date.now();

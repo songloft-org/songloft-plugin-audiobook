@@ -43,7 +43,6 @@ export interface ChapterProgress {
 
 /** 设置 */
 export interface PluginSettings {
-  libraryPath: string;
   favorites: string[];
   recentlyPlayed: { bookId: string; chapterId: string; at: number }[];
 }

@@ -9,6 +9,7 @@
   "entryPath": "audiobook",
   "main": "main.js",
   "minHostVersion": "2.0.0",
+  "externalPaths": ["/app/audiobook"],
   "permissions": [
     "storage",
     "fs",

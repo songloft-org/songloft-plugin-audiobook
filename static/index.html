@@ -74,15 +74,15 @@
             <div class="empty-icon">📚</div>
             <div class="empty-hint">
               请通过 Docker 卷挂载将有声书资源映射到
-              <code>/app/external/audiobook</code>
-              目录下（需配置 fs:external 权限），然后点击右上角「加载」。
+              <code>/app/audiobook</code>
+              目录下，然后点击右上角「加载」。
               <br /><br />
               Docker Compose 示例（建议以只读方式挂载，防止误删）：
               <pre>volumes:
-  - /your/audiobooks:/app/external/audiobook<strong>:ro</strong></pre>
+  - /your/audiobooks:/app/audiobook<strong>:ro</strong></pre>
               <br />
               目录结构示例：
-              <pre>/app/external/audiobook/
+              <pre>/app/audiobook/
 ├── 三体/
 │   ├── cover.jpg（封面图）
 │   ├── 第001集.mp3

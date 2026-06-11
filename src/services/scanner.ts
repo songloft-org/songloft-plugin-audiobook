@@ -12,19 +12,16 @@ import {
 } from '../utils/helpers';
 
 interface ScannerState {
-  libraryPath: string;
   books: Book[];
   chaptersByBookId: Record<string, Chapter[]>;
 }
 
-const DEFAULT_LIBRARY_PATH = 'library';
+export const DEFAULT_LIBRARY_PATH = '/app/audiobook';
 
 /** 扫描整个库目录并返回索引 */
-export async function scanLibrary(options: {
-  libraryPath?: string;
-}): Promise<ScannerState> {
-  const libraryPath = options.libraryPath || DEFAULT_LIBRARY_PATH;
-  const state: ScannerState = { libraryPath, books: [], chaptersByBookId: {} };
+export async function scanLibrary(): Promise<ScannerState> {
+  const libraryPath = DEFAULT_LIBRARY_PATH;
+  const state: ScannerState = { books: [], chaptersByBookId: {} };
 
   let entries: Array<{ name: string; isDir: boolean }> = [];
   try {
