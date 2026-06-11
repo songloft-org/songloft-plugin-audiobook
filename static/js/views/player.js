@@ -30,10 +30,22 @@ export function ensureAudio() {
       );
     }
     updatePlayerUI();
+
+    // 播放超 60s 后提前转码下一集
+    if (el.currentTime >= 60 && !el._preloadTriggered) {
+      el._preloadTriggered = true;
+      preloadNextChapter();
+    }
   });
 
   el.addEventListener('play', () => updatePlayState(true));
-  el.addEventListener('pause', () => updatePlayState(false));
+  el.addEventListener('pause', () => {
+    updatePlayState(false);
+    // 暂停时立即保存进度
+    if (state.currentBookForPlayer && state.currentChapter && isFinite(el.currentTime)) {
+      saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, el.currentTime, el.duration || 0);
+    }
+  });
   el.addEventListener('ended', () => {
     if (!state.currentBookForPlayer || !state.currentChapter) return;
 
@@ -62,7 +74,7 @@ export function ensureAudio() {
   return el;
 }
 
-export function playChapter(book, chapter, switchToPlayer) {
+export async function playChapter(book, chapter, switchToPlayer) {
   state.currentBookForPlayer = book;
   state.currentChapter = chapter;
 
@@ -76,22 +88,66 @@ export function playChapter(book, chapter, switchToPlayer) {
   }
 
   const audio = ensureAudio();
+  audio._preloadTriggered = false; // 新章节重置预加载标记
   updatePlayState(true);
 
-  // 使用 serveFile 直出：Go 层直接 http.ServeFile，无大小限制，支持 Range
   let token = '';
   try {
     const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
     token = auth.accessToken || '';
   } catch (e) {}
+  const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
 
-  const url = `./api/books/${book.id}/chapters/${chapter.id}/audio`;
-  audio.src = token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
+  // 检测转码状态，首次转码可能耗时
+  const withTokenUrl = (path) => withToken(`./api/books/${book.id}${path}`);
+  try {
+    let checkResp = await fetch(withTokenUrl(`/chapters/${chapter.id}/preload?check=1`));
+    let checkData = await checkResp.json();
+    if (checkData.data && !checkData.data.ready) {
+      showToast('音频转码中，请稍候...');
+      updatePlayState(false);
+      // 触发当前集转码（后台）+ 提前转码下一集
+      fetch(withTokenUrl(`/chapters/${chapter.id}/preload`));
+      preloadNextChapter();
+      // 轮询等待就绪（最多 2 分钟）
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        checkResp = await fetch(withTokenUrl(`/chapters/${chapter.id}/preload?check=1`));
+        checkData = await checkResp.json();
+        if (checkData.data && checkData.data.ready) break;
+      }
+      if (!checkData.data || !checkData.data.ready) {
+        showToast('转码超时，请稍后重试');
+        return;
+      }
+    }
+  } catch (e) {
+    // 检测失败仍尝试播放
+  }
+
+  const url = withToken(`./api/books/${book.id}/chapters/${chapter.id}/audio`);
+  audio.src = url;
   audio.playbackRate = state.speed;
   audio.play().catch((e) => {
     showToast('播放失败：' + e.message);
     updatePlayState(false);
   });
+}
+
+/** 预转码下一集（播放 60s 后自动触发） */
+async function preloadNextChapter() {
+  if (!state.currentBookForPlayer || !state.currentChapter) return;
+  const chapters = state.currentBookForPlayer.chapters;
+  const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
+  if (idx < 0 || idx >= chapters.length - 1) return; // 最后一集，无需预加载
+  const next = chapters[idx + 1];
+  let token = '';
+  try {
+    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+    token = auth.accessToken || '';
+  } catch (e) {}
+  const withToken = (url) => token ? `${url}?access_token=${encodeURIComponent(token)}` : url;
+  fetch(withToken(`./api/books/${state.currentBookForPlayer.id}/chapters/${next.id}/preload`));
 }
 
 function saveProgress(bookId, chapterId, position, duration) {

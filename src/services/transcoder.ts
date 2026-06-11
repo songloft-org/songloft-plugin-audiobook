@@ -55,6 +55,13 @@ export async function ensurePlayablePath(inputPath: string): Promise<string> {
   return cachePath;
 }
 
+/** 检查路径是否已转码就绪（兼容格式或缓存已存在） */
+export async function isCacheReady(inputPath: string): Promise<boolean> {
+  if (!needsTranscode(inputPath)) return true;
+  const cp = cacheKey(inputPath);
+  return await songloft.fs.exists(cp).catch(() => false);
+}
+
 /** 检测 ffmpeg 是否可用（结果缓存） */
 export async function isFFmpegAvailable(): Promise<boolean> {
   await ensureFFmpeg();

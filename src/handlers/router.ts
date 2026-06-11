@@ -4,7 +4,7 @@ import { createRouter } from '@songloft/plugin-sdk';
 import type { HTTPRequest } from '@songloft/plugin-sdk';
 import { parseQuery, jsonResponse, errorResponse, getImageMime } from '../utils/helpers';
 import { BookManager } from '../services/bookManager';
-import { ensurePlayablePath } from '../services/transcoder';
+import { ensurePlayablePath, needsTranscode, isCacheReady } from '../services/transcoder';
 
 type AppRouter = ReturnType<typeof createRouter>;
 
@@ -163,14 +163,57 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       const chapter = bm.getChapter(params.id, params.chapterId);
       if (!chapter) return errorResponse('未找到章节', 404);
 
+      if (needsTranscode(chapter.fileRelPath)) {
+        const ready = await isCacheReady(chapter.fileRelPath);
+        if (!ready) {
+          return jsonResponse({ success: false, error: '音频转码中，请稍后再试', transcoding: true }, 503);
+        }
+      }
+
       try {
         const playablePath = await ensurePlayablePath(chapter.fileRelPath);
-        // 由 Go 层直接 http.ServeFile，零拷贝、无大小限制、原生支持 Range
         return { serveFile: { filePath: playablePath } } as any;
       } catch (err) {
         songloft.log.warn(`音频读取失败: ${chapter.fileRelPath} (${String(err)})`);
         return errorResponse('音频文件读取失败', 500);
       }
+    }
+  );
+
+  // ---------- GET /api/books/:id/chapters/:chapterId/preload —— 提前转码 ----------
+  //   ?check=1 仅查询缓存状态，不触发实际转码
+  //   无 check 参数时触发后台转码后立即返回，前端轮询 ?check=1 等待就绪
+  const pendingTranscodes = new Set<string>();
+  router.get(
+    '/api/books/:id/chapters/:chapterId/preload',
+    async (req: HTTPRequest, params: Record<string, string>) => {
+      const chapter = bm.getChapter(params.id, params.chapterId);
+      if (!chapter) return errorResponse('未找到章节', 404);
+
+      const q = parseQuery(req.query || '');
+      const checkOnly = q.check === '1';
+
+      if (checkOnly) {
+        const ready = await isCacheReady(chapter.fileRelPath);
+        return jsonResponse({
+          success: true,
+          data: { ready, transcoding: !ready && pendingTranscodes.has(chapter.fileRelPath) },
+        });
+      }
+
+      const ready = await isCacheReady(chapter.fileRelPath);
+      if (ready) return jsonResponse({ success: true, data: { ready: true } });
+
+      if (pendingTranscodes.has(chapter.fileRelPath)) {
+        return jsonResponse({ success: true, data: { ready: false, transcoding: true } });
+      }
+      pendingTranscodes.add(chapter.fileRelPath);
+
+      ensurePlayablePath(chapter.fileRelPath)
+        .then(() => { pendingTranscodes.delete(chapter.fileRelPath); })
+        .catch(() => { pendingTranscodes.delete(chapter.fileRelPath); });
+
+      return jsonResponse({ success: true, data: { ready: false, transcoding: true } });
     }
   );
 }
