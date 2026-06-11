@@ -14,6 +14,7 @@ export const state = {
   previousView: 'homeView',
   chapterSortOrder: 'asc',
   playlistSortAsc: true,
+  sleepTimer: null,
 };
 
 export function switchView(id) {

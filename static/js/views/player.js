@@ -36,6 +36,18 @@ export function ensureAudio() {
   el.addEventListener('pause', () => updatePlayState(false));
   el.addEventListener('ended', () => {
     if (!state.currentBookForPlayer || !state.currentChapter) return;
+
+    if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
+      state.sleepTimer.chaptersRemaining--;
+      updateSleepTimerUI();
+      if (state.sleepTimer.chaptersRemaining <= 0) {
+        cancelSleepTimer();
+        el.pause();
+        showToast('定时关闭：已播放完设定集数');
+        return;
+      }
+    }
+
     const chapters = state.currentBookForPlayer.chapters;
     const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
     if (idx >= 0 && idx < chapters.length - 1) {
@@ -263,4 +275,107 @@ export function cycleSpeed() {
   if (btn) btn.textContent = state.speed + 'x';
   const audio = state.audioEl || ensureAudio();
   if (audio) audio.playbackRate = state.speed;
+}
+
+// ==================== 定时关闭 ====================
+
+let sleepTimerInterval = null;
+
+export function openSleepTimer() {
+  const overlay = document.getElementById('timerOverlay');
+  if (!overlay) return;
+  overlay.hidden = false;
+}
+
+export function closeSleepTimer() {
+  const overlay = document.getElementById('timerOverlay');
+  if (overlay) overlay.hidden = true;
+  const customOverlay = document.getElementById('timerCustomOverlay');
+  if (customOverlay) customOverlay.hidden = true;
+}
+
+export function startSleepTimer(mode, value) {
+  if (mode === 'time') {
+    const minutes = value;
+    state.sleepTimer = { mode: 'time', value: minutes, endAt: Date.now() + minutes * 60000, chaptersRemaining: null };
+    if (sleepTimerInterval) clearInterval(sleepTimerInterval);
+    sleepTimerInterval = setInterval(() => {
+      const remaining = state.sleepTimer.endAt - Date.now();
+      if (remaining <= 0) {
+        const audio = state.audioEl;
+        if (audio) audio.pause();
+        cancelSleepTimer();
+        showToast('定时关闭：时间到');
+        return;
+      }
+      updateSleepTimerUI();
+    }, 1000);
+  } else {
+    const chapters = value;
+    state.sleepTimer = { mode: 'chapters', value: chapters, endAt: null, chaptersRemaining: chapters };
+    if (sleepTimerInterval) clearInterval(sleepTimerInterval);
+    sleepTimerInterval = setInterval(updateSleepTimerUI, 1000);
+  }
+
+  closeSleepTimer();
+  updateSleepTimerUI();
+
+  const btn = document.getElementById('btnSleepTimer');
+  if (btn) btn.classList.add('timer-active');
+}
+
+export function cancelSleepTimer() {
+  if (sleepTimerInterval) {
+    clearInterval(sleepTimerInterval);
+    sleepTimerInterval = null;
+  }
+  state.sleepTimer = null;
+  const countdown = document.getElementById('playerTimerCountdown');
+  if (countdown) countdown.hidden = true;
+  const btn = document.getElementById('btnSleepTimer');
+  if (btn) {
+    btn.textContent = '⏱';
+    btn.classList.remove('timer-active');
+  }
+}
+
+export function updateSleepTimerUI() {
+  const countdown = document.getElementById('playerTimerCountdown');
+  if (!countdown) return;
+
+  if (!state.sleepTimer) {
+    countdown.hidden = true;
+    return;
+  }
+
+  const btn = document.getElementById('btnSleepTimer');
+  if (!btn) return;
+
+  if (state.sleepTimer.mode === 'time') {
+    const remaining = Math.max(0, Math.ceil((state.sleepTimer.endAt - Date.now()) / 1000));
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    const text = `⏱ ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    btn.textContent = text;
+    countdown.textContent = `定时关闭剩余 ${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    countdown.hidden = false;
+  } else {
+    const remaining = state.sleepTimer.chaptersRemaining;
+    const label = remaining === 1 ? '本集' : `${remaining}集`;
+    btn.textContent = `⏱ ${label}`;
+    countdown.textContent = `定时关闭剩余 ${label}`;
+    countdown.hidden = false;
+  }
+}
+
+export function openCustomPicker() {
+  const overlay = document.getElementById('timerCustomOverlay');
+  if (!overlay) return;
+  document.getElementById('timerCustomValue').textContent = '15';
+  overlay.hidden = false;
+}
+
+export function closeCustomPicker() {
+  const overlay = document.getElementById('timerCustomOverlay');
+  if (overlay) overlay.hidden = true;
 }

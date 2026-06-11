@@ -707,7 +707,115 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 8px;
+}
+
+/* 定时器倒计时显示 */
+.player-timer-countdown {
+  text-align: center;
+  font-size: 12px;
+  color: var(--primary);
+  margin-bottom: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ========== 定时器底 sheet ========== */
+.timer-sheet .timer-sheet-body {
+  padding: 16px 20px 24px;
+  overflow-y: auto;
+}
+.timer-section {
+  margin-bottom: 20px;
+}
+.timer-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+.timer-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.timer-option {
+  padding: 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  background: var(--surface-2);
+  color: var(--text);
+  transition: background .15s, color .15s;
+  border: none;
+  cursor: pointer;
+}
+.timer-option:hover {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.timer-option.active {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+.timer-cancel-row {
+  text-align: center;
+  padding-top: 8px;
+}
+.timer-cancel-row .btn {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* 自定义分钟选择器 */
+.timer-custom-sheet .timer-custom-body {
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.timer-custom-picker {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.timer-stepper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text);
+  border: none;
+  cursor: pointer;
+  transition: background .15s;
+}
+.timer-stepper:hover {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+.timer-stepper:active {
+  transform: scale(0.95);
+}
+.timer-custom-value {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 80px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.timer-custom-unit {
+  font-size: 14px;
+  color: var(--text-3);
+}
+.timer-custom-body .btn-lg {
+  width: 100%;
+  max-width: 240px;
 }
 
 /* ========== 播放列表弹窗 ========== */

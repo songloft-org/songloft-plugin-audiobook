@@ -1,6 +1,6 @@
 // 有声书插件 — 入口
 import { state, switchView } from './state.js';
-import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed } from './views/player.js';
+import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed, openSleepTimer, closeSleepTimer, startSleepTimer, cancelSleepTimer, openCustomPicker, closeCustomPicker } from './views/player.js';
 import { loadSnapshot, loadBooks, loadRecentlyPlayed, triggerRescan } from './views/home.js';
 
 // ==================== 绑定事件 ====================
@@ -72,6 +72,47 @@ function bindEvents() {
       audio.currentTime = (parseFloat(seek.value) / 100) * audio.duration;
       updatePlayerUI();
     }
+  });
+
+  // Sleep timer
+  document.getElementById('btnSleepTimer').addEventListener('click', openSleepTimer);
+  document.getElementById('btnTimerClose').addEventListener('click', closeSleepTimer);
+  document.getElementById('btnTimerCancel').addEventListener('click', () => { cancelSleepTimer(); closeSleepTimer(); });
+  document.getElementById('timerOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeSleepTimer();
+  });
+
+  // Timer options
+  document.querySelectorAll('.timer-option').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mode = btn.getAttribute('data-mode');
+      const value = btn.getAttribute('data-value');
+      if (value === 'custom') {
+        openCustomPicker();
+      } else {
+        startSleepTimer(mode, parseInt(value, 10));
+      }
+    });
+  });
+
+  // Custom minutes picker
+  const customValueEl = document.getElementById('timerCustomValue');
+  document.getElementById('btnCustomPlus').addEventListener('click', () => {
+    let v = parseInt(customValueEl.textContent, 10);
+    if (v < 120) customValueEl.textContent = String(v + 5);
+  });
+  document.getElementById('btnCustomMinus').addEventListener('click', () => {
+    let v = parseInt(customValueEl.textContent, 10);
+    if (v > 5) customValueEl.textContent = String(v - 5);
+  });
+  document.getElementById('btnTimerCustomConfirm').addEventListener('click', () => {
+    const v = parseInt(customValueEl.textContent, 10);
+    startSleepTimer('time', v);
+    closeCustomPicker();
+  });
+  document.getElementById('btnTimerCustomClose').addEventListener('click', closeCustomPicker);
+  document.getElementById('timerCustomOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeCustomPicker();
   });
 }
 

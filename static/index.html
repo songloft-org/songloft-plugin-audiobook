@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>有声书 · 本地资源管理</title>
+  <link rel="icon" type="image/svg+xml" href="static/icon.svg" />
   <link rel="stylesheet" href="static/css/style.css" />
 </head>
 <body>
@@ -138,11 +139,65 @@
           </div>
           <div class="player-full-extra">
             <button class="btn btn-ghost" id="btnSpeedFull">1.0x</button>
+            <button class="btn btn-ghost" id="btnSleepTimer">⏱</button>
             <button class="btn btn-ghost" id="btnPlaylist">📋 播放列表</button>
           </div>
+          <div class="player-timer-countdown" id="playerTimerCountdown" hidden></div>
         </div>
       </section>
     </main>
+
+    <!-- 定时底 sheet -->
+    <div class="playlist-overlay" id="timerOverlay" hidden>
+      <div class="playlist-sheet timer-sheet">
+        <div class="playlist-sheet-header">
+          <span>定时关闭</span>
+          <button class="btn btn-ghost" id="btnTimerClose">✕</button>
+        </div>
+        <div class="timer-sheet-body">
+          <div class="timer-section">
+            <div class="timer-section-label">时间模式</div>
+            <div class="timer-options">
+              <button class="timer-option" data-mode="time" data-value="10">10分钟</button>
+              <button class="timer-option" data-mode="time" data-value="15">15分钟</button>
+              <button class="timer-option" data-mode="time" data-value="30">30分钟</button>
+              <button class="timer-option timer-option-custom" data-mode="time" data-value="custom">自定义…</button>
+            </div>
+          </div>
+          <div class="timer-section">
+            <div class="timer-section-label">集数模式</div>
+            <div class="timer-options">
+              <button class="timer-option" data-mode="chapters" data-value="1">本集结束</button>
+              <button class="timer-option" data-mode="chapters" data-value="2">2集</button>
+              <button class="timer-option" data-mode="chapters" data-value="3">3集</button>
+              <button class="timer-option" data-mode="chapters" data-value="5">5集</button>
+            </div>
+          </div>
+          <div class="timer-cancel-row">
+            <button class="btn btn-ghost" id="btnTimerCancel">取消定时</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 自定义分钟选择器 -->
+    <div class="playlist-overlay" id="timerCustomOverlay" hidden>
+      <div class="playlist-sheet timer-sheet timer-custom-sheet">
+        <div class="playlist-sheet-header">
+          <span>自定义分钟</span>
+          <button class="btn btn-ghost" id="btnTimerCustomClose">✕</button>
+        </div>
+        <div class="timer-custom-body">
+          <div class="timer-custom-picker">
+            <button class="timer-stepper" id="btnCustomMinus">−</button>
+            <div class="timer-custom-value" id="timerCustomValue">15</div>
+            <button class="timer-stepper" id="btnCustomPlus">+</button>
+          </div>
+          <div class="timer-custom-unit">分钟</div>
+          <button class="btn btn-primary btn-lg" id="btnTimerCustomConfirm">确认</button>
+        </div>
+      </div>
+    </div>
 
     <!-- 播放列表弹窗 -->
     <div class="playlist-overlay" id="playlistOverlay" hidden>

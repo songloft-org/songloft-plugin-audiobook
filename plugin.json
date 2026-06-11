@@ -6,6 +6,7 @@
   "author": "MiMusic Team",
   "homepage": "",
   "license": "MIT",
+  "icon": "icon.svg",
   "entryPath": "audiobook",
   "main": "main.js",
   "minHostVersion": "2.0.0",
