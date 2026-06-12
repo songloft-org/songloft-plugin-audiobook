@@ -31,6 +31,7 @@ export class BookManager {
     recentlyPlayed: [],
   };
   private progress: Record<string, ChapterProgress> = {};
+  private scanning = false;
 
   async init(): Promise<void> {
     // 1) 加载设置
@@ -57,7 +58,7 @@ export class BookManager {
       // ignore
     }
 
-    // 3) 从缓存加载
+    // 3) 从缓存加载（立即就绪，不阻塞）
     try {
       const cached = await loadLibraryIndex();
       if (cached && cached.books && cached.books.length > 0) {
@@ -69,16 +70,24 @@ export class BookManager {
       // ignore
     }
 
-    // 4) 实时扫描（首次安装无缓存时必须有结果）
+    // 4) 后台扫描（网络文件系统如 WebDAV 可能较慢，不阻塞初始化）
+    this.scanInBackground();
+  }
+
+  private async scanInBackground(): Promise<void> {
+    if (this.scanning) return;
+    this.scanning = true;
     try {
       const state = await scanLibrary();
       this.books = state.books;
       this.chaptersByBookId = state.chaptersByBookId;
       this.scannedAt = Date.now();
       await saveLibraryIndex(state);
-      songloft.log.info(`有声书插件：扫描完成，共 ${this.books.length} 本书`);
+      songloft.log.info(`有声书插件：后台扫描完成，共 ${this.books.length} 本书`);
     } catch (err) {
-      songloft.log.warn(`有声书插件：扫描失败: ${String(err)}`);
+      songloft.log.warn(`有声书插件：后台扫描失败: ${String(err)}`);
+    } finally {
+      this.scanning = false;
     }
   }
 
