@@ -18,6 +18,63 @@ interface ScannerState {
 
 export const DEFAULT_LIBRARY_PATH = '/app/audiobook';
 
+const MAX_SCAN_DEPTH = 6;
+
+interface WalkResult {
+  audios: string[];
+  coverRel: string | null;
+  descRel: string | null;
+}
+
+/**
+ * 递归扫描目录，收集音频文件、封面和描述文件，最深 maxDepth 层
+ * depth: 当前递归深度（0 起始）
+ */
+async function walkDir(
+  dirPath: string,
+  depth: number,
+  maxDepth: number
+): Promise<WalkResult> {
+  const audios: string[] = [];
+  let coverRel: string | null = null;
+  let descRel: string | null = null;
+
+  let entries: Array<{ name: string; isDir: boolean }> = [];
+  try {
+    entries = (await songloft.fs.readdir(dirPath)) || [];
+  } catch {
+    return { audios, coverRel, descRel };
+  }
+
+  for (const e of entries) {
+    const fullPath = `${dirPath}/${e.name}`;
+    if (e.isDir) {
+      if (depth < maxDepth) {
+        const sub = await walkDir(fullPath, depth + 1, maxDepth);
+        audios.push(...sub.audios);
+        if (!coverRel && sub.coverRel) coverRel = sub.coverRel;
+        if (!descRel && sub.descRel) descRel = sub.descRel;
+      }
+    } else {
+      if (isAudioFile(e.name)) {
+        audios.push(fullPath);
+      }
+      if (!coverRel && isImageFile(e.name)) {
+        const lower = e.name.toLowerCase();
+        const base = lower.substring(0, lower.lastIndexOf('.'));
+        if (base === 'cover' || base === 'folder' || base === '封面') {
+          coverRel = fullPath;
+        }
+      }
+      if (!descRel && isDescFile(e.name)) {
+        descRel = fullPath;
+      }
+    }
+  }
+
+  return { audios, coverRel, descRel };
+}
+
 /** 扫描整个库目录并返回索引 */
 export async function scanLibrary(): Promise<ScannerState> {
   const libraryPath = DEFAULT_LIBRARY_PATH;
@@ -85,42 +142,19 @@ async function scanBookFolder(
   folder: string
 ): Promise<{ book: Book; chapters: Chapter[] } | null> {
   const folderRel = `${libraryPath}/${folder}`;
-  const entries = await songloft.fs.readdir(folderRel);
 
-  const audios: string[] = [];
-  let coverRel: string | null = null;
-  let descRel: string | null = null;
+  const result = await walkDir(folderRel, 0, MAX_SCAN_DEPTH);
 
-  for (const e of entries) {
-    if (e.isDir) continue;
-    const name = e.name;
-    if (isAudioFile(name)) {
-      audios.push(name);
-      continue;
-    }
-    if (!coverRel && isImageFile(name)) {
-      const lower = name.toLowerCase();
-      const base = lower.substring(0, lower.lastIndexOf('.'));
-      if (base === 'cover' || base === 'folder' || base === '封面') {
-        coverRel = `${folderRel}/${name}`;
-      }
-    }
-    if (!descRel && isDescFile(name)) {
-      descRel = `${folderRel}/${name}`;
-    }
-  }
+  if (result.audios.length === 0) return null;
 
-  if (audios.length === 0) return null;
-
-  // 按文件名自然排序
-  audios.sort((a, b) => naturalCompare(a, b));
+  result.audios.sort((a, b) => naturalCompare(a, b));
 
   const chapters: Chapter[] = [];
   let latestMod = 0;
   let totalSize = 0;
 
-  for (let i = 0; i < audios.length; i++) {
-    const rel = `${folderRel}/${audios[i]}`;
+  for (let i = 0; i < result.audios.length; i++) {
+    const rel = result.audios[i];
     try {
       const st = await songloft.fs.stat(rel);
       const size = Number(st.size || 0);
@@ -128,10 +162,12 @@ async function scanBookFolder(
       if (mod > latestMod) latestMod = mod;
       totalSize += size;
 
+      const fileName = rel.substring(rel.lastIndexOf('/') + 1);
+
       chapters.push({
         id: `${safeId(folder)}-ch${String(i + 1).padStart(3, '0')}`,
         index: i + 1,
-        title: stripExt(audios[i]),
+        title: stripExt(fileName),
         duration: estimateDurationFromSize(size),
         fileSize: size,
         fileRelPath: rel,
@@ -142,13 +178,21 @@ async function scanBookFolder(
     }
   }
 
-  // 如果没识别到封面，则选用第一个图片
+  let coverRel = result.coverRel;
+  let descRel = result.descRel;
+
+  // 如果在子目录中未找到命名封面，尝试根目录的任何图片
   if (!coverRel) {
-    for (const e of entries) {
-      if (!e.isDir && isImageFile(e.name)) {
-        coverRel = `${folderRel}/${e.name}`;
-        break;
+    try {
+      const rootEntries = (await songloft.fs.readdir(folderRel)) || [];
+      for (const e of rootEntries) {
+        if (!e.isDir && isImageFile(e.name)) {
+          coverRel = `${folderRel}/${e.name}`;
+          break;
+        }
       }
+    } catch {
+      // ignore
     }
   }
 
