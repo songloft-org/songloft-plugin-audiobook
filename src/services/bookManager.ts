@@ -226,7 +226,7 @@ export class BookManager {
 
   async addRecentlyPlayed(bookId: string, chapterId: string): Promise<void> {
     const list = this.settings.recentlyPlayed.filter(
-      (x) => !(x.bookId === bookId && x.chapterId === chapterId)
+      (x) => x.bookId !== bookId
     );
     list.unshift({ bookId, chapterId, at: Date.now() });
     this.settings.recentlyPlayed = list.slice(0, 30);
