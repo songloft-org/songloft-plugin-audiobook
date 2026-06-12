@@ -1,6 +1,6 @@
 {
   "name": "audiobook",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "有声书插件：本地有声书资源管理与播放",
   "private": true,
   "scripts": {
