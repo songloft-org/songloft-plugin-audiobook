@@ -389,6 +389,15 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .book-card-info { display: none; }
 
+/* ========== 过滤无结果 ========== */
+.no-results {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-3);
+  font-size: 14px;
+  grid-column: 1 / -1;
+}
+
 /* ========== 空状态 ========== */
 .empty-state {
   text-align: center;

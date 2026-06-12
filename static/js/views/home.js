@@ -51,9 +51,13 @@ export async function loadBooks() {
     const title = document.getElementById('booksSectionTitle');
     if (title) title.textContent = state.keyword ? `搜索: "${state.keyword}"` : '全部书籍';
     const empty = document.getElementById('emptyState');
-    if (empty) empty.hidden = state.total > 0;
+    if (empty) empty.hidden = true;
+    const grid = document.getElementById('bookGrid');
+    if (state.total === 0 && grid) {
+      grid.innerHTML = '<div class="no-results">没有匹配的书籍</div>';
+    }
     const sortBar = document.querySelector('.sort-bar');
-    if (sortBar) sortBar.style.display = state.total > 0 ? '' : 'none';
+    if (sortBar) sortBar.style.display = '';
   } catch (e) {
     console.error(e);
     showToast('加载失败：' + e.message);

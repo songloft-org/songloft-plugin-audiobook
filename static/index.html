@@ -91,11 +91,18 @@
 │   ├── cover.jpg（封面图）
 │   ├── 第001集.mp3
 │   ├── 第002集.mp3
-│   └── description.txt（描述、简介）
-└── 明朝那些事儿/
-    ├── folder.jpg（封面图）
-    ├── 第一章.mp3
-    └── 第二章.mp3</pre>
+│   └── description.txt（描述简介）
+├── 明朝那些事儿/
+│   ├── folder.jpg（封面图）
+│   ├── 第一章.mp3
+│   └── 第二章.mp3
+└── 书名/
+    ├── 上部/  （支持子文件夹）
+    │   └── 第001集.mp3
+    └── 封面.png</pre>
+                <p style="color:var(--text-3);font-size:13px;">
+                    支持最多 6 层子文件夹递归扫描。封面优先识别 <code>cover.*</code>、<code>folder.*</code>、<code>封面.*</code>。
+                </p>
             </div>
             <button class="btn btn-primary" onclick="app.loadSnapshot()">重新加载</button>
           </div>
@@ -143,7 +150,7 @@
           <div class="player-full-extra">
             <button class="btn btn-ghost" id="btnSpeedFull">1.0x</button>
             <button class="btn btn-ghost" id="btnSleepTimer">⏱</button>
-            <button class="btn btn-ghost" id="btnPlaylist">📋 播放列表</button>
+            <button class="btn btn-ghost" id="btnPlaylist">☰</button>
           </div>
           <div class="player-timer-countdown" id="playerTimerCountdown" hidden></div>
         </div>
