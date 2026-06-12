@@ -68,7 +68,10 @@
 
         <!-- 书籍网格 -->
         <section class="books-section">
-          <h2 class="section-title" id="booksSectionTitle">全部书籍</h2>
+          <div class="section-title-row">
+            <h2 class="section-title" id="booksSectionTitle">全部书籍</h2>
+            <button class="info-btn" id="dirInfoBtn" title="目录结构说明">ⓘ</button>
+          </div>
           <div class="book-grid" id="bookGrid" aria-live="polite"></div>
           <div id="emptyState" class="empty-state" hidden>
             <div class="empty-title" style="font-weight: bold; font-size: 1.2em;">资源未找到！</div>
@@ -210,6 +213,36 @@
           </div>
         </div>
         <div class="playlist-sheet-body" id="playlistSheetBody"></div>
+      </div>
+    </div>
+
+    <!-- 目录结构说明弹窗 -->
+    <div class="playlist-overlay" id="dirInfoOverlay" hidden>
+      <div class="playlist-sheet dir-info-sheet">
+        <div class="playlist-sheet-header">
+          <span>有声书目录结构</span>
+          <button class="btn btn-ghost" id="dirInfoClose">✕</button>
+        </div>
+        <div class="dir-info-body">
+          <p>请将有声书按以下目录结构放入 <code>/app/audiobook</code>：</p>
+          <pre>/app/audiobook/
+├── 三体/
+│   ├── cover.jpg（封面图）
+│   ├── 第001集.mp3
+│   ├── 第002集.mp3
+│   └── description.txt（描述简介）
+├── 明朝那些事儿/
+│   ├── folder.jpg（封面图）
+│   ├── 第一章.mp3
+│   └── 第二章.mp3
+└── 书名/
+    ├── 上部/  （支持子文件夹）
+    │   └── 第001集.mp3
+    └── 封面.png</pre>
+          <p style="color:var(--text-3);font-size:13px;">
+            支持最多 6 层子文件夹递归扫描。封面优先识别 <code>cover.*</code>、<code>folder.*</code>、<code>封面.*</code>。
+          </p>
+        </div>
       </div>
     </div>
 

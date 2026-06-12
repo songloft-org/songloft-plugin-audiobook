@@ -74,6 +74,17 @@ function bindEvents() {
     }
   });
 
+  // Directory structure info
+  document.getElementById('dirInfoBtn').addEventListener('click', () => {
+    document.getElementById('dirInfoOverlay').hidden = false;
+  });
+  document.getElementById('dirInfoClose').addEventListener('click', () => {
+    document.getElementById('dirInfoOverlay').hidden = true;
+  });
+  document.getElementById('dirInfoOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.hidden = true;
+  });
+
   // Sleep timer
   document.getElementById('btnSleepTimer').addEventListener('click', openSleepTimer);
   document.getElementById('btnTimerClose').addEventListener('click', closeSleepTimer);

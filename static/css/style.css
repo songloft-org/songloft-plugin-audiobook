@@ -242,6 +242,53 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .recent-card-info { flex: 1; min-width: 0; }
 
+/* ========== 首页标题行 ========== */
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.section-title-row .section-title { margin: 0; }
+.info-btn {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 13px;
+  color: var(--text-3);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.info-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ========== 目录结构弹窗 ========== */
+.dir-info-body {
+  padding: 20px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.dir-info-body p { margin: 0 0 12px; color: var(--text-2); font-size: 14px; }
+.dir-info-body pre {
+  background: var(--surface-2);
+  padding: 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.dir-info-body code {
+  background: var(--surface-2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 /* ========== 书籍网格 ========== */
 .books-section { padding: 8px 0; }
 
