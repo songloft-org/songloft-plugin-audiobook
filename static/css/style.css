@@ -4,54 +4,30 @@
    ============================================================ */
 
 :root {
-  /* 颜色 - 亮色 */
-  --bg: #fef7ff;
-  --surface: #ffffff;
-  --surface-2: #f3edf7;
-  --primary: #6750a4;
-  --on-primary: #ffffff;
-  --primary-container: #eaddff;
-  --on-primary-container: #21005d;
-  --secondary: #625b71;
-  --tertiary: #7d5260;
-  --text: #1d1b20;
-  --text-2: #49454f;
-  --text-3: #79747e;
-  --border: #e0e0e6;
-  --outline: #79747e;
-  --danger: #b3261e;
-  --shadow: 0 2px 8px rgba(29, 27, 32, 0.08);
-  --shadow-lg: 0 8px 24px rgba(29, 27, 32, 0.15);
+  --bg: var(--md-surface);
+  --surface: var(--md-surface-1);
+  --surface-2: var(--md-surface-2);
+  --primary: var(--md-primary);
+  --on-primary: var(--md-on-primary);
+  --primary-container: var(--md-primary-container);
+  --on-primary-container: var(--md-on-primary-container);
+  --text: var(--md-on-surface);
+  --text-2: var(--md-on-surface-variant);
+  --text-3: var(--md-outline);
+  --border: var(--md-outline-variant);
+  --outline: var(--md-outline);
+  --danger: var(--md-error);
+  --shadow: var(--md-shadow-1);
+  --shadow-lg: var(--md-shadow-3);
 
-  /* 间距 */
   --radius-sm: 8px;
   --radius: 12px;
   --radius-lg: 16px;
   --radius-xl: 24px;
 
-  /* 字体 */
   --font: system-ui, -apple-system, "Segoe UI", "PingFang SC",
           "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial,
           sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141218;
-    --surface: #1d1b20;
-    --surface-2: #2b2930;
-    --primary: #d0bcff;
-    --on-primary: #381e72;
-    --primary-container: #4f378b;
-    --on-primary-container: #eaddff;
-    --text: #e6e1e5;
-    --text-2: #cac4d0;
-    --text-3: #938f99;
-    --border: #36343b;
-    --outline: #938f99;
-    --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  }
 }
 
 * { box-sizing: border-box; }
