@@ -375,6 +375,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 /* ========== 空状态 ========== */
+.empty-state[hidden] { display: none; }
 .empty-state {
   display: flex;
   flex-direction: column;
