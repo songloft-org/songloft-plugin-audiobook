@@ -197,7 +197,25 @@ async function scanBookFolder(
   }
 
   let description = '';
-  if (descRel) {
+  let category = '默认';
+  let tags: string[] = [];
+  let author = '未知';
+
+  // 优先读取 metadata.json
+  try {
+    const metaRaw = await songloft.fs.readFile(`${folderRel}/metadata.json`);
+    if (metaRaw) {
+      const meta = JSON.parse(metaRaw);
+      if (meta.description) description = meta.description;
+      if (meta.category) category = meta.category;
+      if (meta.tags) tags = meta.tags;
+      if (meta.author) author = meta.author;
+    }
+  } catch {
+    // metadata.json 不存在或解析失败，走旧逻辑
+  }
+
+  if (!description && descRel) {
     try {
       description = ((await songloft.fs.readFile(descRel)) || '').trim();
     } catch {
@@ -208,11 +226,11 @@ async function scanBookFolder(
   const book: Book = {
     id: safeId(folder),
     title: folder,
-    author: '未知',
+    author,
     coverUrl: coverRel,
     description: description || `共 ${chapters.length} 章`,
-    category: '默认',
-    tags: [],
+    category,
+    tags,
     updatedAt: latestMod || Date.now(),
     chapterCount: chapters.length,
     totalSize,

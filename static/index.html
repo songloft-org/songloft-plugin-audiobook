@@ -81,13 +81,13 @@
             </p>
             <pre class="empty-struct">/app/audiobook/
 ├── 书名/
+│   ├── metadata.json（简介/类型/标签/作者）
 │   ├── cover.jpg
-│   ├── description.txt（描述简介）
 │   ├── 第001集.mp3
 │   └── 第002集.mp3
 └── 另一本书/
     └── 第001集.mp3</pre>
-            <p class="empty-footnote">支持 6 层子目录递归扫描 <br>封面优先识别 cover.* 、 folder.* 、 封面.*</p>
+            <p class="empty-footnote">支持 6 层子目录递归扫描 · 封面优先识别 cover.* / folder.* / 封面.* <br>metadata.json 可通过详情页 ✏️ 编辑自动生成</p>
             <button class="btn btn-primary" onclick="app.loadSnapshot()">重新加载</button>
           </div>
           <!-- 分页 -->
@@ -218,10 +218,11 @@
           <p>请将有声书按以下目录结构放入 <code>/app/audiobook</code>：</p>
           <pre>/app/audiobook/
 ├── 三体/
+│   ├── metadata.json（简介/类型/标签/作者）
 │   ├── cover.jpg（封面图）
 │   ├── 第001集.mp3
 │   ├── 第002集.mp3
-│   └── description.txt（描述简介）
+│   └── description.txt（可选，兼容旧版）
 ├── 明朝那些事儿/
 │   ├── folder.jpg（封面图）
 │   ├── 第一章.mp3
@@ -231,7 +232,8 @@
     │   └── 第001集.mp3
     └── 封面.png</pre>
           <p style="color:var(--text-3);font-size:13px;">
-            支持最多 6 层子文件夹递归扫描。封面优先识别 <code>cover.*</code>、<code>folder.*</code>、<code>封面.*</code>。
+            支持最多 6 层子文件夹递归扫描。封面优先识别 <code>cover.*</code>、<code>folder.*</code>、<code>封面.*</code>。<br>
+            <code>metadata.json</code> 可通过有声书详情页 ✏️ 编辑自动生成。
           </p>
         </div>
       </div>
@@ -242,6 +244,43 @@
       <img id="playerFabCover" src="" alt="" />
       <div class="player-fab-placeholder" id="playerFabPlaceholder">🎧</div>
       <div class="player-fab-ring"></div>
+    </div>
+
+    <!-- 编辑弹窗 -->
+    <div id="editOverlay" class="edit-overlay" hidden>
+      <div class="edit-modal">
+        <h3>编辑书籍信息</h3>
+        <div class="edit-field">
+          <label for="editDescription">简介</label>
+          <textarea id="editDescription" rows="4"></textarea>
+        </div>
+        <div class="edit-field">
+          <label for="editCategory">类型</label>
+          <input type="text" id="editCategory" placeholder="如：科幻、悬疑、历史" />
+        </div>
+        <div class="edit-field">
+          <label for="editTags">标签（逗号分隔）</label>
+          <input type="text" id="editTags" placeholder="科幻, 三体, 刘慈欣" />
+        </div>
+        <div class="edit-field">
+          <label for="editAuthor">作者</label>
+          <input type="text" id="editAuthor" placeholder="未知" />
+        </div>
+        <div class="edit-field">
+          <label>封面</label>
+          <div class="edit-cover-row">
+            <img id="editCoverPreview" class="edit-cover-preview" alt="封面预览" />
+            <div class="edit-cover-inputs">
+              <input type="text" id="editCoverUrl" placeholder="或输入图片 URL..." />
+              <input type="file" id="editCoverFile" accept="image/*" />
+            </div>
+          </div>
+        </div>
+        <div class="edit-actions">
+          <button class="btn btn-ghost" id="editCancelBtn">取消</button>
+          <button class="btn btn-primary" id="editSaveBtn">保存</button>
+        </div>
+      </div>
     </div>
 
     <audio id="audio" preload="metadata"></audio>

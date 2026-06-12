@@ -1,6 +1,6 @@
 // 书籍管理器：封装扫描、查询、进度、收藏等功能
 
-import type { Book, BookDetail, Chapter, PluginSettings, ChapterProgress } from '../types';
+import type { Book, BookDetail, Chapter, BookMetadata, PluginSettings, ChapterProgress } from '../types';
 import {
   scanLibrary,
   saveLibraryIndex,
@@ -271,5 +271,45 @@ export class BookManager {
 
   getSettings(): PluginSettings {
     return { ...this.settings };
+  }
+
+  // ---------- 元数据编辑 ----------
+
+  async updateMetadata(bookId: string, data: BookMetadata): Promise<void> {
+    const book = this.books.find((b) => b.id === bookId);
+    if (!book) throw new Error('书籍不存在');
+
+    const metaRel = `${book.folderRelPath}/metadata.json`;
+    let existing: BookMetadata = {};
+    try {
+      const raw = await songloft.fs.readFile(metaRel);
+      if (raw) existing = JSON.parse(raw);
+    } catch {
+      // 不存在就新建
+    }
+
+    const merged: BookMetadata = { ...existing, ...data };
+    for (const k of Object.keys(merged)) {
+      if (merged[k] === undefined) delete merged[k];
+    }
+    await songloft.fs.writeFile(metaRel, JSON.stringify(merged, null, 2));
+
+    if (data.description !== undefined) book.description = data.description;
+    if (data.category !== undefined) book.category = data.category;
+    if (data.tags !== undefined) book.tags = data.tags;
+    if (data.author !== undefined) book.author = data.author;
+  }
+
+  async updateCover(bookId: string, base64: string): Promise<string | null> {
+    const book = this.books.find((b) => b.id === bookId);
+    if (!book) throw new Error('书籍不存在');
+
+    const coverRel = `${book.folderRelPath}/cover.jpg`;
+    await songloft.fs.writeFile(coverRel, base64, { encoding: 'base64' });
+
+    book.coverUrl = coverRel;
+
+    const mime = 'image/jpeg';
+    return `data:${mime};base64,${base64}`;
   }
 }

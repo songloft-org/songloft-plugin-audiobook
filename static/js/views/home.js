@@ -77,7 +77,7 @@ export function renderBookGrid() {
           : `<div style="width:100%;height:100%;display:grid;place-items:center;font-size:48px;background:var(--surface-2);">🎧</div>`}
         <div class="book-card-overlay">
           <div class="book-card-title">${escapeHtml(book.title)}</div>
-          <div class="book-card-meta">${book.chapterCount} 章 · ${formatFileSize(book.totalSize)}</div>
+          <div class="book-card-meta">${book.author !== '未知' ? escapeHtml(book.author) + ' · ' : ''}${book.chapterCount} 章 · ${formatFileSize(book.totalSize)}</div>
         </div>
         <button class="book-card-fav ${book.isFavorite ? 'on' : ''}" data-fav="${book.id}" title="收藏">★</button>
         <button class="book-card-play" data-play="${book.id}" title="播放">▶</button>

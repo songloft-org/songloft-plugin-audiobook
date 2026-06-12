@@ -488,6 +488,7 @@ input[type="range"]::-moz-range-thumb {
   gap: 24px;
   padding: 24px;
   background: var(--surface);
+  position: relative;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   margin-bottom: 20px;
@@ -520,7 +521,109 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 20px;
   white-space: pre-wrap;
 }
+.book-hero-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .book-hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+
+/* ========== 编辑按钮 ========== */
+.edit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: none;
+  cursor: pointer;
+  display: grid; place-items: center;
+  font-size: 16px;
+  color: var(--text-2);
+  opacity: 0;
+  transition: opacity .2s, background .2s;
+  z-index: 2;
+}
+.book-hero:hover .edit-btn { opacity: 1; }
+.edit-btn:hover { background: var(--primary-container); color: var(--on-primary-container); }
+
+/* ========== 编辑弹窗 ========== */
+.edit-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.edit-overlay[hidden] { display: none; }
+
+.edit-modal {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+.edit-modal h3 { margin: 0 0 20px; font-size: 18px; }
+
+.edit-field { margin-bottom: 16px; }
+.edit-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  margin-bottom: 4px;
+}
+.edit-field input,
+.edit-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font);
+  outline: none;
+  transition: border-color .2s;
+}
+.edit-field input:focus,
+.edit-field textarea:focus {
+  border-color: var(--primary);
+}
+.edit-field textarea { resize: vertical; min-height: 80px; }
+
+.edit-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.edit-cover-preview {
+  width: 80px; height: 80px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--surface-2);
+  flex-shrink: 0;
+}
+.edit-cover-inputs { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.edit-cover-inputs input[type="text"] { font-size: 12px; }
+.edit-cover-inputs input[type="file"] { font-size: 12px; }
+
+.edit-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
 
 @media (max-width: 640px) {
   .book-hero { flex-direction: column; }

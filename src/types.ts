@@ -41,6 +41,14 @@ export interface ChapterProgress {
   updatedAt: number;
 }
 
+/** 书籍元数据（对应 metadata.json） */
+export interface BookMetadata {
+  description?: string;
+  category?: string;
+  tags?: string[];
+  author?: string;
+}
+
 /** 设置 */
 export interface PluginSettings {
   favorites: string[];

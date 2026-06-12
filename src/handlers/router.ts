@@ -216,4 +216,65 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       return jsonResponse({ success: true, data: { ready: false, transcoding: true } });
     }
   );
+
+  // ---------- GET /api/books/:id/metadata —— 获取元数据（供编辑弹窗预填） ----------
+  router.get(
+    '/api/books/:id/metadata',
+    async (req: HTTPRequest, params: Record<string, string>) => {
+      const book = bm.getBookById(params.id);
+      if (!book) return errorResponse('未找到该书籍', 404);
+      return jsonResponse({
+        success: true,
+        data: {
+          title: book.title,
+          description: book.description,
+          category: book.category,
+          tags: book.tags,
+          author: book.author,
+          coverUrl: await resolveCoverUrl(book.coverUrl),
+        },
+      });
+    }
+  );
+
+  // ---------- PUT /api/books/:id/metadata —— 更新元数据 ----------
+  router.put(
+    '/api/books/:id/metadata',
+    async (req: HTTPRequest, params: Record<string, string>) => {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const { description, category, tags, author } = body;
+      try {
+        await bm.updateMetadata(params.id, { description, category, tags, author });
+        const book = bm.getBookById(params.id);
+        return jsonResponse({
+          success: true,
+          data: {
+            description: book.description,
+            category: book.category,
+            tags: book.tags,
+            author: book.author,
+            coverUrl: await resolveCoverUrl(book.coverUrl),
+          },
+        });
+      } catch (e) {
+        return errorResponse(String(e), 500);
+      }
+    }
+  );
+
+  // ---------- POST /api/books/:id/cover —— 更新封面 ----------
+  router.post(
+    '/api/books/:id/cover',
+    async (req: HTTPRequest, params: Record<string, string>) => {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const { base64 } = body;
+      if (!base64) return errorResponse('请提供 base64 图片数据', 400);
+      try {
+        const coverDataUri = await bm.updateCover(params.id, base64);
+        return jsonResponse({ success: true, data: { coverUrl: coverDataUri } });
+      } catch (e) {
+        return errorResponse(String(e), 500);
+      }
+    }
+  );
 }
