@@ -74,36 +74,20 @@
           </div>
           <div class="book-grid" id="bookGrid" aria-live="polite"></div>
           <div id="emptyState" class="empty-state" hidden>
-            <div class="empty-title" style="font-weight: bold; font-size: 1.2em;">资源未找到！</div>
             <div class="empty-icon">📚</div>
-            <div class="empty-hint">
-              请通过 Docker 卷挂载将有声书资源映射到
-              <code>/app/audiobook</code>
-              目录下，然后点击右上角「加载」。
-              <br /><br />
-              Docker Compose 示例（建议以只读方式挂载，防止误删）：
-              <pre>volumes:
-  - /your/audiobooks:/app/audiobook<strong>:ro</strong></pre>
-              <br />
-              目录结构示例：
-              <pre>/app/audiobook/
-├── 三体/
-│   ├── cover.jpg（封面图）
+            <div class="empty-title">资源未找到！</div>
+            <p class="empty-hint">
+              请将有声书放入 <code>/app/audiobook/</code> 目录后点击右上角「加载」
+            </p>
+            <pre class="empty-struct">/app/audiobook/
+├── 书名/
+│   ├── cover.jpg
+│   ├── description.txt（描述简介）
 │   ├── 第001集.mp3
-│   ├── 第002集.mp3
-│   └── description.txt（描述简介）
-├── 明朝那些事儿/
-│   ├── folder.jpg（封面图）
-│   ├── 第一章.mp3
-│   └── 第二章.mp3
-└── 书名/
-    ├── 上部/  （支持子文件夹）
-    │   └── 第001集.mp3
-    └── 封面.png</pre>
-                <p style="color:var(--text-3);font-size:13px;">
-                    支持最多 6 层子文件夹递归扫描。封面优先识别 <code>cover.*</code>、<code>folder.*</code>、<code>封面.*</code>。
-                </p>
-            </div>
+│   └── 第002集.mp3
+└── 另一本书/
+    └── 第001集.mp3</pre>
+            <p class="empty-footnote">支持 6 层子目录递归扫描 · 封面优先识别 cover.* / folder.* / 封面.*</p>
             <button class="btn btn-primary" onclick="app.loadSnapshot()">重新加载</button>
           </div>
           <!-- 分页 -->

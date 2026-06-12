@@ -400,29 +400,51 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 /* ========== 空状态 ========== */
 .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 180px);
+  padding: 24px;
   text-align: center;
-  padding: 64px 24px;
   color: var(--text-3);
 }
-.empty-state pre {
-  text-align: left;
-  background: var(--surface-2);
-  padding: 16px;
-  border-radius: var(--radius);
-  font-size: 12px;
-  overflow-x: auto;
-  margin: 12px auto;
-  max-width: 480px;
-  color: var(--text-2);
+.empty-icon { font-size: 36px; margin-bottom: 8px; }
+.empty-title {
+  font-weight: bold;
+  font-size: 1.1em;
+  margin-bottom: 8px;
 }
-.empty-state code {
+.empty-hint {
+  font-size: 13px;
+  margin: 0 0 12px;
+  max-width: 360px;
+  line-height: 1.5;
+}
+.empty-hint code {
   background: var(--surface-2);
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
 }
-.empty-icon { font-size: 48px; margin-bottom: 16px; }
-.empty-state .btn { margin-top: 16px; }
+.empty-struct {
+  text-align: left;
+  background: var(--surface-2);
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 11px;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0 auto 8px;
+  max-width: 360px;
+  color: var(--text-2);
+}
+.empty-footnote {
+  font-size: 12px;
+  color: var(--text-3);
+  margin: 0 0 12px;
+}
+.empty-state .btn { margin-top: 4px; }
 
 /* ========== 分页 ========== */
 .pagination {
