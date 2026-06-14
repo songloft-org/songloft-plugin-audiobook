@@ -126,6 +126,7 @@ export async function playChapter(book, chapter, switchToPlayer) {
   }
 
   const url = withToken(`./api/books/${book.id}/chapters/${chapter.id}/audio`);
+  console.log('播放地址：', url);
   audio.src = url;
   audio.playbackRate = state.speed;
   audio.play().catch((e) => {
@@ -422,6 +423,137 @@ export function updateSleepTimerUI() {
     countdown.textContent = `定时关闭剩余 ${label}`;
     countdown.hidden = false;
   }
+}
+
+// ==================== 推送到小爱音箱 ====================
+
+export async function pushToXiaoAi() {
+  if (!state.currentBookForPlayer || !state.currentChapter) {
+    showToast('请先播放有声书');
+    return;
+  }
+
+  const overlay = document.getElementById('devicePickerOverlay');
+  const body = document.getElementById('devicePickerBody');
+  if (!overlay || !body) return;
+
+  body.innerHTML = '<div class="device-picker-loading">正在加载设备列表...</div>';
+  overlay.hidden = false;
+
+  let token = '';
+  try {
+    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+    token = auth.accessToken || '';
+  } catch (e) {}
+
+  const headers = {};
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
+  let devicesData;
+  try {
+    const resp = await fetch('../miot/mina/devices', { headers });
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '获取设备列表失败');
+    devicesData = json.data;
+  } catch (e) {
+    body.innerHTML = `<div class="device-picker-error">加载失败：${e.message}</div>`;
+    return;
+  }
+
+  if (!devicesData || devicesData.length === 0) {
+    body.innerHTML = '<div class="device-picker-empty">未找到小爱账号，请先在小爱插件中登录</div>';
+    return;
+  }
+
+  const allDevices = [];
+  for (const account of devicesData) {
+    const devices = account.devices || [];
+    for (const d of devices) {
+      allDevices.push({
+        account_id: account.account_id,
+        device_id: d.deviceID,
+        device_name: d.name || d.alias || '未命名设备',
+        model: d.model || '',
+        isLast: d.deviceID === account.last_selected_device_id,
+      });
+    }
+  }
+
+  if (allDevices.length === 0) {
+    body.innerHTML = '<div class="device-picker-empty">未找到可用设备</div>';
+    return;
+  }
+
+  // 最近选中的设备排前面
+  allDevices.sort((a, b) => (b.isLast ? 1 : 0) - (a.isLast ? 1 : 0));
+
+  let html = '';
+  for (const acc of devicesData) {
+    const accDevices = allDevices.filter(d => d.account_id === acc.account_id);
+    if (accDevices.length === 0) continue;
+    html += `<div class="device-picker-account">${acc.account_name || acc.account_id}</div>`;
+    for (const d of accDevices) {
+      html += `
+        <div class="device-row" data-account="${d.account_id}" data-device="${d.device_id}">
+          <div class="device-icon">🔊</div>
+          <div class="device-info">
+            <div class="device-name">${d.device_name}${d.isLast ? ' (上次使用)' : ''}</div>
+            <div class="device-model">${d.model}</div>
+          </div>
+        </div>`;
+    }
+  }
+  body.innerHTML = html;
+
+  body.querySelectorAll('.device-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const accountId = row.getAttribute('data-account');
+      const deviceId = row.getAttribute('data-device');
+      doPushToDevice(accountId, deviceId, token);
+      overlay.hidden = true;
+    });
+  });
+}
+
+async function doPushToDevice(accountId, deviceId, token) {
+  const audio = state.audioEl || ensureAudio();
+  if (!audio || !audio.src) {
+    showToast('当前没有播放内容');
+    return;
+  }
+
+  // audio.src 已经是完整 URL，直接使用
+  const audioUrl = audio.src;
+
+  showToast('正在推送到小爱音箱...');
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+
+  try {
+    const resp = await fetch('../miot/mina/play-url', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        account_id: accountId,
+        device_id: deviceId,
+        url: audioUrl,
+      }),
+    });
+    const json = await resp.json();
+    if (json.success) {
+      showToast('已推送到小爱音箱');
+    } else {
+      showToast('推送失败：' + (json.error || '未知错误'));
+    }
+  } catch (e) {
+    showToast('推送失败：' + e.message);
+  }
+}
+
+export function closeDevicePicker() {
+  const overlay = document.getElementById('devicePickerOverlay');
+  if (overlay) overlay.hidden = true;
 }
 
 export function openCustomPicker() {

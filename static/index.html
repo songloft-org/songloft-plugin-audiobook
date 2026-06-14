@@ -135,6 +135,7 @@
             <button class="btn btn-ghost" id="btnSpeedFull">1.0x</button>
             <button class="btn btn-ghost" id="btnSleepTimer">⏱</button>
             <button class="btn btn-ghost" id="btnPlaylist">☰</button>
+            <button class="btn btn-ghost" id="btnPushXiaoAi" title="推送到小爱音箱">🔊 小爱</button>
           </div>
           <div class="player-timer-countdown" id="playerTimerCountdown" hidden></div>
         </div>
@@ -204,6 +205,19 @@
           </div>
         </div>
         <div class="playlist-sheet-body" id="playlistSheetBody"></div>
+      </div>
+    </div>
+
+    <!-- 小爱设备选择弹窗 -->
+    <div class="playlist-overlay" id="devicePickerOverlay" hidden>
+      <div class="playlist-sheet">
+        <div class="playlist-sheet-header">
+          <span>选择小爱音箱</span>
+          <button class="btn btn-ghost" id="btnDevicePickerClose">✕</button>
+        </div>
+        <div class="playlist-sheet-body" id="devicePickerBody">
+          <div class="device-picker-loading">正在加载设备列表...</div>
+        </div>
       </div>
     </div>
 
