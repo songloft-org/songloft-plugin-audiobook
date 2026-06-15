@@ -877,6 +877,49 @@ input[type="range"]::-moz-range-thumb {
   font-variant-numeric: tabular-nums;
 }
 
+/* 遥控模式标签 */
+.remote-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 16px;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+  font-size: 12px;
+  font-weight: 500;
+}
+.remote-badge[hidden] { display: none; }
+.remote-badge-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.remote-badge-exit {
+  margin-left: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--on-primary-container);
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid var(--on-primary-container);
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity .15s, background .15s;
+}
+.remote-badge-exit:hover {
+  opacity: 1;
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
 /* ========== 定时器底 sheet ========== */
 .timer-sheet .timer-sheet-body {
   padding: 16px 20px 24px;
@@ -1017,7 +1060,7 @@ input[type="range"]::-moz-range-thumb {
   flex: 1;
 }
 
-/* ========== 小爱设备选择 ========== */
+/* ========== 音响设备选择 ========== */
 .device-picker-loading {
   padding: 32px 20px;
   text-align: center;

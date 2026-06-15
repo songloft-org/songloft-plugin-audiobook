@@ -1,6 +1,6 @@
 // 有声书插件 — 入口
 import { state, switchView } from './state.js';
-import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed, openSleepTimer, closeSleepTimer, startSleepTimer, cancelSleepTimer, openCustomPicker, closeCustomPicker, pushToXiaoAi, closeDevicePicker } from './views/player.js';
+import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed, openSleepTimer, closeSleepTimer, startSleepTimer, cancelSleepTimer, openCustomPicker, closeCustomPicker, pushToMiot, closeDevicePicker, exitMiotRemote } from './views/player.js';
 import { loadSnapshot, loadBooks, loadRecentlyPlayed, triggerRescan } from './views/home.js';
 
 // ==================== 绑定事件 ====================
@@ -126,12 +126,13 @@ function bindEvents() {
     if (e.target === e.currentTarget) closeCustomPicker();
   });
 
-  // 小爱音箱推送
-  document.getElementById('btnPushXiaoAi').addEventListener('click', pushToXiaoAi);
+  // 音响推送
+  document.getElementById('btnPushMiot').addEventListener('click', pushToMiot);
   document.getElementById('btnDevicePickerClose').addEventListener('click', closeDevicePicker);
   document.getElementById('devicePickerOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeDevicePicker();
   });
+  document.getElementById('btnExitRemote').addEventListener('click', exitMiotRemote);
 }
 
 // ==================== 启动 ====================

@@ -75,6 +75,9 @@ export function ensureAudio() {
 }
 
 export async function playChapter(book, chapter, switchToPlayer) {
+  // 本地播放时退出遥控模式
+  exitMiotRemote();
+
   state.currentBookForPlayer = book;
   state.currentChapter = chapter;
 
@@ -289,6 +292,7 @@ export function togglePlaylistSort() {
 // ==================== 播放控制 ====================
 
 export function playerPrevChapter() {
+  if (state.miotRemote) { miotPrevChapter(); return; }
   if (!state.currentBookForPlayer || !state.currentChapter) return;
   const chapters = state.currentBookForPlayer.chapters;
   const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
@@ -298,6 +302,7 @@ export function playerPrevChapter() {
 }
 
 export function playerNextChapter() {
+  if (state.miotRemote) { miotNextChapter(); return; }
   if (!state.currentBookForPlayer || !state.currentChapter) return;
   const chapters = state.currentBookForPlayer.chapters;
   const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
@@ -314,6 +319,10 @@ export function playerSeek(seconds) {
 }
 
 export function playerTogglePlay() {
+  if (state.miotRemote) {
+    miotTogglePlay();
+    return;
+  }
   const audio = ensureAudio();
   if (!audio.src) {
     if (state.currentBookForPlayer && state.currentChapter) {
@@ -425,11 +434,234 @@ export function updateSleepTimerUI() {
   }
 }
 
-// ==================== 推送到小爱音箱 ====================
+// ==================== 推送到音响 + 遥控模式 ====================
 
-export async function pushToXiaoAi() {
+function getAuthToken() {
+  try {
+    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+    return auth.accessToken || '';
+  } catch (e) { return ''; }
+}
+
+function miotHeaders(token) {
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  return h;
+}
+
+async function miotPost(path, body, token) {
+  const resp = await fetch('../miot' + path, {
+    method: 'POST',
+    headers: miotHeaders(token),
+    body: JSON.stringify(body),
+  });
+  return resp.json();
+}
+
+async function miotGet(path, token) {
+  const resp = await fetch('../miot' + path, { headers: miotHeaders(token) });
+  return resp.json();
+}
+
+// ---------- 遥控模式 ----------
+
+function enterMiotRemote(accountId, deviceId, token) {
+  // 先退出旧的遥控模式
+  exitMiotRemote();
+
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true };
+
+  // 暂停本地音频
+  const audio = state.audioEl;
+  if (audio && !audio.paused) audio.pause();
+
+  // 更新 UI 为遥控模式
+  updateRemoteUI(true);
+  updatePlayState(true);
+
+  // 启动心跳轮询
+  pollMiotStatus();
+  state.miotRemote.pollTimer = setInterval(pollMiotStatus, 5000);
+}
+
+export function exitMiotRemote() {
+  if (!state.miotRemote) return;
+  if (state.miotRemote.pollTimer) {
+    clearInterval(state.miotRemote.pollTimer);
+  }
+  state.miotRemote = null;
+  updateRemoteUI(false);
+}
+
+function updateRemoteUI(isRemote) {
+  // 快进/后退/倍速按钮：遥控模式下隐藏
+  const btnRewind = document.getElementById('btnRewind');
+  const btnForward = document.getElementById('btnForward');
+  const btnSpeed = document.getElementById('btnSpeedFull');
+  if (btnRewind) btnRewind.style.display = isRemote ? 'none' : '';
+  if (btnForward) btnForward.style.display = isRemote ? 'none' : '';
+  if (btnSpeed) btnSpeed.style.display = isRemote ? 'none' : '';
+
+  // 🔊音响 按钮：本地模式显示，遥控模式隐藏
+  const btnPush = document.getElementById('btnPushMiot');
+  if (btnPush) btnPush.style.display = isRemote ? 'none' : '';
+
+  // ✕退出遥控 按钮：遥控模式显示，本地模式隐藏
+  const btnExit = document.getElementById('btnExitRemote');
+  if (btnExit) btnExit.style.display = isRemote ? '' : 'none';
+
+  // 进度条：遥控模式下禁用拖动
+  const seek = document.getElementById('playerFullSeek');
+  if (seek) seek.disabled = isRemote;
+
+  // 遥控模式标签
+  const badge = document.getElementById('remoteBadge');
+  if (badge) badge.hidden = !isRemote;
+}
+
+async function pollMiotStatus() {
+  const r = state.miotRemote;
+  if (!r) return;
+
+  try {
+    const data = await miotGet(`/player/status?account_id=${r.accountId}&device_id=${r.deviceId}`, r.token);
+    if (!data.success || !data.data) return;
+
+    const d = data.data;
+    const position = d.position || 0;
+    const duration = d.duration || 0;
+    const isPlaying = d.state === 'playing';
+
+    r.isPlaying = isPlaying;
+
+    // 更新进度条
+    const seek = document.getElementById('playerFullSeek');
+    const cur = document.getElementById('playerFullCur');
+    const dur = document.getElementById('playerFullDur');
+    if (seek && duration > 0) seek.value = String((position / duration) * 100);
+    if (cur) cur.textContent = formatDuration(position);
+    if (dur) dur.textContent = formatDuration(duration);
+
+    // 更新播放/暂停按钮 + 封面旋转
+    updatePlayState(isPlaying);
+
+    // 保存进度到本地
+    if (state.currentBookForPlayer && state.currentChapter && duration > 0) {
+      saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, position, duration);
+    }
+
+    // 播放完毕 → 自动推下一章
+    if (duration > 0 && position >= duration - 2) {
+      pushNextChapterToMiot();
+    }
+  } catch (e) {
+    // 轮询失败静默忽略
+  }
+}
+
+async function pushNextChapterToMiot() {
+  if (!state.currentBookForPlayer || !state.currentChapter) return;
+  const chapters = state.currentBookForPlayer.chapters;
+  const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
+  if (idx < 0 || idx >= chapters.length - 1) {
+    showToast('已是最后一章');
+    exitMiotRemote();
+    return;
+  }
+  const next = chapters[idx + 1];
+  state.currentChapter = next;
+  updatePlayerInfo();
+  await pushChapterUrlToMiot(state.currentBookForPlayer, next);
+}
+
+async function pushChapterUrlToMiot(book, chapter) {
+  const r = state.miotRemote;
+  if (!r) return;
+
+  const audio = state.audioEl || ensureAudio();
+  if (!audio || !audio.src) {
+    showToast('播放地址不可用');
+    return;
+  }
+
+  // 从当前 audio.src 替换 chapterId 得到目标章节的完整 URL
+  const chapterPattern = /\/chapters\/[^/]+\/audio/;
+  const audioUrl = audio.src.replace(chapterPattern, `/chapters/${chapter.id}/audio`);
+
+  try {
+    const json = await miotPost('/mina/play-url', {
+      account_id: r.accountId,
+      device_id: r.deviceId,
+      url: audioUrl,
+    }, r.token);
+    if (json.success) {
+      showToast(`正在播放：${chapter.title}`);
+    } else {
+      showToast('推送失败：' + (json.error || '未知错误'));
+    }
+  } catch (e) {
+    showToast('推送失败：' + e.message);
+  }
+}
+
+// ---------- 遥控按钮 ----------
+
+export async function miotTogglePlay() {
+  const r = state.miotRemote;
+  if (!r) return;
+  try {
+    if (r.isPlaying) {
+      await miotPost('/mina/pause', { account_id: r.accountId, device_id: r.deviceId }, r.token);
+      r.isPlaying = false;
+      updatePlayState(false);
+    } else {
+      await miotPost('/mina/resume', { account_id: r.accountId, device_id: r.deviceId }, r.token);
+      r.isPlaying = true;
+      updatePlayState(true);
+    }
+  } catch (e) {
+    showToast('操作失败：' + e.message);
+  }
+}
+
+export async function miotPrevChapter() {
+  if (!state.currentBookForPlayer || !state.currentChapter) return;
+  const chapters = state.currentBookForPlayer.chapters;
+  const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
+  if (idx > 0) {
+    const prev = chapters[idx - 1];
+    state.currentChapter = prev;
+    updatePlayerInfo();
+    await pushChapterUrlToMiot(state.currentBookForPlayer, prev);
+  }
+}
+
+export async function miotNextChapter() {
+  await pushNextChapterToMiot();
+}
+
+// ---------- 设备选择 + 推送 ----------
+
+export async function pushToMiot() {
   if (!state.currentBookForPlayer || !state.currentChapter) {
     showToast('请先播放有声书');
+    return;
+  }
+
+  const token = getAuthToken();
+  const headers = miotHeaders(token);
+
+  // 校验 miot 插件是否已安装并启用
+  try {
+    const resp = await fetch('../../jsplugins', { headers });
+    const json = await resp.json();
+    const miotPlugin = (json.plugins || []).find(p => p.entry_path === 'miot' && p.status === 'active');
+    if (!miotPlugin) {
+      showToast('请先安装并启用"智能音箱"插件');
+      return;
+    }
+  } catch (e) {
+    showToast('无法获取插件列表');
     return;
   }
 
@@ -439,15 +671,6 @@ export async function pushToXiaoAi() {
 
   body.innerHTML = '<div class="device-picker-loading">正在加载设备列表...</div>';
   overlay.hidden = false;
-
-  let token = '';
-  try {
-    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
-    token = auth.accessToken || '';
-  } catch (e) {}
-
-  const headers = {};
-  if (token) headers['Authorization'] = 'Bearer ' + token;
 
   let devicesData;
   try {
@@ -461,13 +684,13 @@ export async function pushToXiaoAi() {
   }
 
   if (!devicesData || devicesData.length === 0) {
-    body.innerHTML = '<div class="device-picker-empty">未找到小爱账号，请先在小爱插件中登录</div>';
+    body.innerHTML = '<div class="device-picker-empty">未找到账号，请先在小爱插件中登录</div>';
     return;
   }
 
   const allDevices = [];
   for (const account of devicesData) {
-    const devices = account.devices || [];
+    const devices = (account.devices || []).filter(d => d.managed);
     for (const d of devices) {
       allDevices.push({
         account_id: account.account_id,
@@ -480,11 +703,10 @@ export async function pushToXiaoAi() {
   }
 
   if (allDevices.length === 0) {
-    body.innerHTML = '<div class="device-picker-empty">未找到可用设备</div>';
+    body.innerHTML = '<div class="device-picker-empty">没有已监听的设备，请先在小爱插件中勾选要监听的设备</div>';
     return;
   }
 
-  // 最近选中的设备排前面
   allDevices.sort((a, b) => (b.isLast ? 1 : 0) - (a.isLast ? 1 : 0));
 
   let html = '';
@@ -495,7 +717,7 @@ export async function pushToXiaoAi() {
     for (const d of accDevices) {
       html += `
         <div class="device-row" data-account="${d.account_id}" data-device="${d.device_id}">
-          <div class="device-icon">🔊</div>
+          <div class="device-icon">☁️</div>
           <div class="device-info">
             <div class="device-name">${d.device_name}${d.isLast ? ' (上次使用)' : ''}</div>
             <div class="device-model">${d.model}</div>
@@ -506,43 +728,60 @@ export async function pushToXiaoAi() {
   body.innerHTML = html;
 
   body.querySelectorAll('.device-row').forEach((row) => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', async () => {
       const accountId = row.getAttribute('data-account');
       const deviceId = row.getAttribute('data-device');
-      doPushToDevice(accountId, deviceId, token);
       overlay.hidden = true;
+      await doPushToDevice(accountId, deviceId, token);
     });
   });
 }
 
 async function doPushToDevice(accountId, deviceId, token) {
+  const book = state.currentBookForPlayer;
+  const chapter = state.currentChapter;
+  if (!book || !chapter) return;
+
+  // 先检查转码状态
+  const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
+  try {
+    let checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
+    let checkData = await checkResp.json();
+    if (checkData.data && !checkData.data.ready) {
+      showToast('音频转码中，请稍候...');
+      fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload`));
+      for (let i = 0; i < 60; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
+        checkData = await checkResp.json();
+        if (checkData.data && checkData.data.ready) break;
+      }
+      if (!checkData.data || !checkData.data.ready) {
+        showToast('转码超时，请稍后重试');
+        return;
+      }
+    }
+  } catch (e) {}
+
+  // audio.src 已经是完整 URL，直接使用
   const audio = state.audioEl || ensureAudio();
   if (!audio || !audio.src) {
     showToast('当前没有播放内容');
     return;
   }
-
-  // audio.src 已经是完整 URL，直接使用
   const audioUrl = audio.src;
 
-  showToast('正在推送到小爱音箱...');
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = 'Bearer ' + token;
+  showToast('正在推送到音响...');
 
   try {
-    const resp = await fetch('../miot/mina/play-url', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        account_id: accountId,
-        device_id: deviceId,
-        url: audioUrl,
-      }),
-    });
-    const json = await resp.json();
+    const json = await miotPost('/mina/play-url', {
+      account_id: accountId,
+      device_id: deviceId,
+      url: audioUrl,
+    }, token);
     if (json.success) {
-      showToast('已推送到小爱音箱');
+      showToast('已推送到音响');
+      enterMiotRemote(accountId, deviceId, token);
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
     }

@@ -118,6 +118,10 @@
           <div class="player-full-info">
             <div class="player-full-book" id="playerFullBook">书名</div>
             <div class="player-full-chapter" id="playerFullChapter">章节</div>
+            <div class="remote-badge" id="remoteBadge" hidden>
+              <span class="remote-badge-dot"></span>
+              <span>音响播放中</span>
+            </div>
           </div>
           <div class="player-full-progress">
             <span class="time" id="playerFullCur">00:00</span>
@@ -135,7 +139,8 @@
             <button class="btn btn-ghost" id="btnSpeedFull">1.0x</button>
             <button class="btn btn-ghost" id="btnSleepTimer">⏱</button>
             <button class="btn btn-ghost" id="btnPlaylist">☰</button>
-            <button class="btn btn-ghost" id="btnPushXiaoAi" title="推送到小爱音箱">🔊 小爱</button>
+            <button class="btn btn-ghost" id="btnPushMiot" title="推送到音响">☁️音响</button>
+            <button class="btn btn-ghost" id="btnExitRemote" style="display:none">✕ 退出遥控</button>
           </div>
           <div class="player-timer-countdown" id="playerTimerCountdown" hidden></div>
         </div>
@@ -208,11 +213,11 @@
       </div>
     </div>
 
-    <!-- 小爱设备选择弹窗 -->
+    <!-- 音响设备选择弹窗 -->
     <div class="playlist-overlay" id="devicePickerOverlay" hidden>
       <div class="playlist-sheet">
         <div class="playlist-sheet-header">
-          <span>选择小爱音箱</span>
+          <span>选择音响</span>
           <button class="btn btn-ghost" id="btnDevicePickerClose">✕</button>
         </div>
         <div class="playlist-sheet-body" id="devicePickerBody">

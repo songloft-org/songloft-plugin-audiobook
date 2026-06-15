@@ -15,6 +15,7 @@ export const state = {
   chapterSortOrder: 'asc',
   playlistSortAsc: true,
   sleepTimer: null,
+  miotRemote: null, // { accountId, deviceId, token, pollTimer, isPlaying }
 };
 
 export function switchView(id) {
