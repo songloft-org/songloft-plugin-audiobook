@@ -298,6 +298,7 @@ export class BookManager {
     if (data.category !== undefined) book.category = data.category;
     if (data.tags !== undefined) book.tags = data.tags;
     if (data.author !== undefined) book.author = data.author;
+    if (data.coverRatio !== undefined) book.coverRatio = data.coverRatio;
   }
 
   async updateCover(bookId: string, base64: string): Promise<string | null> {

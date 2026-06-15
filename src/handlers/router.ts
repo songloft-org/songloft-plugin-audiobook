@@ -231,6 +231,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
           category: book.category,
           tags: book.tags,
           author: book.author,
+          coverRatio: book.coverRatio || '',
           coverUrl: await resolveCoverUrl(book.coverUrl),
         },
       });
@@ -242,9 +243,9 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     '/api/books/:id/metadata',
     async (req: HTTPRequest, params: Record<string, string>) => {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const { description, category, tags, author } = body;
+      const { description, category, tags, author, coverRatio } = body;
       try {
-        await bm.updateMetadata(params.id, { description, category, tags, author });
+        await bm.updateMetadata(params.id, { description, category, tags, author, coverRatio });
         const book = bm.getBookById(params.id);
         return jsonResponse({
           success: true,
@@ -253,6 +254,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
             category: book.category,
             tags: book.tags,
             author: book.author,
+            coverRatio: book.coverRatio || '',
             coverUrl: await resolveCoverUrl(book.coverUrl),
           },
         });

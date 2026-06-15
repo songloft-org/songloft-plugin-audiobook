@@ -26,6 +26,7 @@ export function renderBookDetail(book) {
   const el = document.getElementById('bookDetail');
   if (!el) return;
   const hasCover = !!book.coverUrl;
+  const ratioStyle = book.coverRatio ? ` style="aspect-ratio:${book.coverRatio.replace(':', '/')}"` : '';
 
   const chapters = [...book.chapters].sort((a, b) =>
     state.chapterSortOrder === 'asc' ? a.index - b.index : b.index - a.index
@@ -34,8 +35,8 @@ export function renderBookDetail(book) {
   el.innerHTML = `
     <div class="book-hero">
       ${hasCover
-        ? `<img class="book-hero-cover" src="${book.coverUrl}" alt="${escapeHtml(book.title)}">`
-        : `<div class="book-hero-cover" style="display:grid;place-items:center;background:var(--surface-2);font-size:64px;">🎧</div>`}
+        ? `<img class="book-hero-cover"${ratioStyle} src="${book.coverUrl}" alt="${escapeHtml(book.title)}">`
+        : `<div class="book-hero-cover"${ratioStyle} style="display:grid;place-items:center;background:var(--surface-2);font-size:64px;${book.coverRatio ? 'aspect-ratio:' + book.coverRatio.replace(':', '/') + ';' : ''}">🎧</div>`}
       <button class="edit-btn" id="editBookBtn" title="编辑书籍信息">✏️</button>
       <div class="book-hero-info">
         <h2 class="book-hero-title">${escapeHtml(book.title)}</h2>
@@ -111,6 +112,7 @@ export function openEditModal(book) {
   document.getElementById('editCategory').value = book.category || '';
   document.getElementById('editTags').value = (book.tags || []).join(', ');
   document.getElementById('editAuthor').value = book.author || '';
+  document.getElementById('editCoverRatio').value = book.coverRatio || '';
   document.getElementById('editCoverPreview').src = book.coverUrl || '';
   document.getElementById('editCoverUrl').value = '';
   document.getElementById('editCoverFile').value = '';
@@ -152,11 +154,12 @@ document.getElementById('editSaveBtn').addEventListener('click', async () => {
     const category = document.getElementById('editCategory').value.trim();
     const tagsRaw = document.getElementById('editTags').value.trim();
     const author = document.getElementById('editAuthor').value.trim();
+    const coverRatio = document.getElementById('editCoverRatio').value;
     const tags = tagsRaw ? tagsRaw.split(',').map((s) => s.trim()).filter(Boolean) : [];
 
     await api(`/api/books/${bookId}/metadata`, {
       method: 'PUT',
-      body: JSON.stringify({ description, category, tags, author }),
+      body: JSON.stringify({ description, category, tags, author, coverRatio }),
       headers: { 'Content-Type': 'application/json' },
     });
 

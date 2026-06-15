@@ -469,7 +469,7 @@ function enterMiotRemote(accountId, deviceId, token) {
   // 先退出旧的遥控模式
   exitMiotRemote();
 
-  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true };
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, tickTimer: null, isPlaying: true, syncPosition: 0, syncTime: 0, syncDuration: 0 };
 
   // 暂停本地音频
   const audio = state.audioEl;
@@ -479,16 +479,16 @@ function enterMiotRemote(accountId, deviceId, token) {
   updateRemoteUI(true);
   updatePlayState(true);
 
-  // 启动心跳轮询
+  // 启动心跳轮询 + 平滑进度 ticker
   pollMiotStatus();
   state.miotRemote.pollTimer = setInterval(pollMiotStatus, 5000);
+  state.miotRemote.tickTimer = setInterval(tickMiotProgress, 1000);
 }
 
 export function exitMiotRemote() {
   if (!state.miotRemote) return;
-  if (state.miotRemote.pollTimer) {
-    clearInterval(state.miotRemote.pollTimer);
-  }
+  if (state.miotRemote.pollTimer) clearInterval(state.miotRemote.pollTimer);
+  if (state.miotRemote.tickTimer) clearInterval(state.miotRemote.tickTimer);
   state.miotRemote = null;
   updateRemoteUI(false);
 }
@@ -519,6 +519,20 @@ function updateRemoteUI(isRemote) {
   if (badge) badge.hidden = !isRemote;
 }
 
+function tickMiotProgress() {
+  const r = state.miotRemote;
+  if (!r || !r.isPlaying || r.syncDuration <= 0) return;
+
+  const elapsed = (Date.now() - r.syncTime) / 1000;
+  const position = Math.min(r.syncPosition + elapsed, r.syncDuration);
+  const pct = (position / r.syncDuration) * 100;
+
+  const seek = document.getElementById('playerFullSeek');
+  const cur = document.getElementById('playerFullCur');
+  if (seek) seek.value = String(pct);
+  if (cur) cur.textContent = formatDuration(position);
+}
+
 async function pollMiotStatus() {
   const r = state.miotRemote;
   if (!r) return;
@@ -533,6 +547,9 @@ async function pollMiotStatus() {
     const isPlaying = d.state === 'playing';
 
     r.isPlaying = isPlaying;
+    r.syncPosition = position;
+    r.syncTime = Date.now();
+    r.syncDuration = duration;
 
     // 更新进度条
     const seek = document.getElementById('playerFullSeek');

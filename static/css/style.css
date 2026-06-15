@@ -584,7 +584,8 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: 4px;
 }
 .edit-field input,
-.edit-field textarea {
+.edit-field textarea,
+.edit-field select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -597,7 +598,8 @@ input[type="range"]::-moz-range-thumb {
   transition: border-color .2s;
 }
 .edit-field input:focus,
-.edit-field textarea:focus {
+.edit-field textarea:focus,
+.edit-field select:focus {
   border-color: var(--primary);
 }
 .edit-field textarea { resize: vertical; min-height: 80px; }

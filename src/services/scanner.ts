@@ -200,6 +200,7 @@ async function scanBookFolder(
   let category = '默认';
   let tags: string[] = [];
   let author = '未知';
+  let coverRatio = '';
 
   // 优先读取 metadata.json
   try {
@@ -210,6 +211,7 @@ async function scanBookFolder(
       if (meta.category) category = meta.category;
       if (meta.tags) tags = meta.tags;
       if (meta.author) author = meta.author;
+      if (meta.coverRatio) coverRatio = meta.coverRatio;
     }
   } catch {
     // metadata.json 不存在或解析失败，走旧逻辑
@@ -228,6 +230,7 @@ async function scanBookFolder(
     title: folder,
     author,
     coverUrl: coverRel,
+    coverRatio,
     description: description || `共 ${chapters.length} 章`,
     category,
     tags,

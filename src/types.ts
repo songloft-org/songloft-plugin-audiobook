@@ -19,6 +19,7 @@ export interface Book {
   title: string;
   author: string;
   coverUrl: string | null;
+  coverRatio: string;
   description: string;
   category: string;
   tags: string[];
@@ -47,6 +48,7 @@ export interface BookMetadata {
   category?: string;
   tags?: string[];
   author?: string;
+  coverRatio?: string;
 }
 
 /** 设置 */

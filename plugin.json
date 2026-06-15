@@ -4,7 +4,7 @@
   "version": "1.0.6",
   "description": "本地有声书管理与播放：扫描本地有声书目录，提供分类展示、搜索、章节播放、播放进度与收藏功能。",
   "author": "MiMusic Team",
-  "homepage": "",
+  "homepage": "https://github.com/mimusic-org/mimusic-jsplugin-releases/tree/audiobook",
   "license": "Apache-2.0",
   "icon": "icon.svg",
   "entryPath": "audiobook",
