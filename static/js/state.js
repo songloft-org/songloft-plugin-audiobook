@@ -16,7 +16,14 @@ export const state = {
   playlistSortAsc: true,
   sleepTimer: null,
   miotRemote: null, // { accountId, deviceId, token, pollTimer, isPlaying }
+  realDurations: {}, // chapterId → 真实时长（浏览器 audio.duration，秒）
 };
+
+/** 获取章节最佳时长：优先用浏览器解析的真实时长，其次用服务端估算值 */
+export function getChapterDuration(ch) {
+  if (!ch) return 0;
+  return (state.realDurations && state.realDurations[ch.id]) || ch.duration || 0;
+}
 
 export function switchView(id) {
   // Record current active view before switching

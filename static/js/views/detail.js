@@ -1,7 +1,7 @@
 // 书籍详情页：章节列表、收藏切换、元数据编辑
 import { api } from '../api.js';
 import { formatDuration, formatFileSize, escapeHtml, showToast } from '../utils.js';
-import { state, switchView } from '../state.js';
+import { state, switchView, getChapterDuration } from '../state.js';
 import { playChapter } from './player.js';
 
 let editingBookId = null;
@@ -61,14 +61,14 @@ export function renderBookDetail(book) {
               <div class="chapter-index">${String(ch.index).padStart(3, '0')}</div>
               <div class="chapter-text">
                 <div class="chapter-title">${escapeHtml(ch.title)}</div>
-                <div class="chapter-sub">${formatDuration(ch.duration)} · ${formatFileSize(ch.fileSize)}${ch.progress && ch.progress.position ? ` · 听到 ${formatDuration(ch.progress.position)}` : ''}</div>
+                <div class="chapter-sub">${formatDuration(getChapterDuration(ch))} · ${formatFileSize(ch.fileSize)}${ch.progress && ch.progress.position ? ` · 听到 ${formatDuration(ch.progress.position)}` : ''}</div>
                 ${ch.progress && ch.progress.duration && ch.progress.position
                   ? `<div class="chapter-progress"><div class="chapter-progress-bar" style="width:${Math.min(100, (ch.progress.position / ch.progress.duration) * 100)}%"></div></div>`
                   : ''}
               </div>
             </div>
             <div class="chapter-row-right">
-              <div class="chapter-time">${formatDuration(ch.duration)}</div>
+              <div class="chapter-time">${formatDuration(getChapterDuration(ch))}</div>
             </div>
           </div>
         `).join('')}

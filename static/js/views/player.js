@@ -1,7 +1,7 @@
 // 播放器：核心播放、FAB 悬浮按钮、全屏播放页
 import { api } from '../api.js';
 import { formatDuration, formatFileSize, escapeHtml, showToast } from '../utils.js';
-import { state, switchView } from '../state.js';
+import { state, switchView, getChapterDuration } from '../state.js';
 
 // ==================== 音频核心 ====================
 
@@ -67,6 +67,9 @@ export function ensureAudio() {
     }
   });
   el.addEventListener('loadedmetadata', () => {
+    if (state.currentChapter && isFinite(el.duration)) {
+      state.realDurations[state.currentChapter.id] = el.duration;
+    }
     if (state.currentChapter && state.currentChapter.progress && state.currentChapter.progress.position > 0) {
       try { el.currentTime = state.currentChapter.progress.position; } catch (e) {}
     }
@@ -241,11 +244,11 @@ export function renderPlaylistModal() {
           <div class="chapter-index">${String(ch.index).padStart(3, '0')}</div>
           <div class="chapter-text">
             <div class="chapter-title">${escapeHtml(ch.title)}</div>
-            <div class="chapter-sub">${formatDuration(ch.duration)} · ${formatFileSize(ch.fileSize)}</div>
+            <div class="chapter-sub">${formatDuration(getChapterDuration(ch))} · ${formatFileSize(ch.fileSize)}</div>
           </div>
         </div>
         <div class="chapter-row-right">
-          <div class="chapter-time">${formatDuration(ch.duration)}</div>
+          <div class="chapter-time">${formatDuration(getChapterDuration(ch))}</div>
         </div>
       </div>
     `;
@@ -368,8 +371,15 @@ export function startSleepTimer(mode, value) {
     sleepTimerInterval = setInterval(() => {
       const remaining = state.sleepTimer.endAt - Date.now();
       if (remaining <= 0) {
-        const audio = state.audioEl;
-        if (audio) audio.pause();
+        if (state.miotRemote) {
+          const r = state.miotRemote;
+          miotPost('/mina/pause', { account_id: r.accountId, device_id: r.deviceId }, r.token).catch(() => {});
+          r.isPlaying = false;
+          updatePlayState(false);
+        } else {
+          const audio = state.audioEl;
+          if (audio) audio.pause();
+        }
         cancelSleepTimer();
         showToast('定时关闭：时间到');
         return;
@@ -463,15 +473,25 @@ async function miotGet(path, token) {
   return resp.json();
 }
 
+function versionGte(v1, v2) {
+  const a = v1.replace(/^v/, '').split('.').map(Number);
+  const b = v2.replace(/^v/, '').split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const na = a[i] || 0, nb = b[i] || 0;
+    if (na !== nb) return na > nb;
+  }
+  return true;
+}
+
 // ---------- 遥控模式 ----------
 
 function enterMiotRemote(accountId, deviceId, token) {
   // 先退出旧的遥控模式
   exitMiotRemote();
 
-  state.miotRemote = { accountId, deviceId, token, pollTimer: null, tickTimer: null, isPlaying: true, syncPosition: 0, syncTime: 0, syncDuration: 0 };
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, tickTimer: null, isPlaying: true, syncPosition: 0, syncTime: 0, syncDuration: 0, _pushing: false };
 
-  // 暂停本地音频
+  // 暂停本地音频（优先执行，防止期间 ended 事件干扰）
   const audio = state.audioEl;
   if (audio && !audio.paused) audio.pause();
 
@@ -486,11 +506,20 @@ function enterMiotRemote(accountId, deviceId, token) {
 }
 
 export function exitMiotRemote() {
-  if (!state.miotRemote) return;
-  if (state.miotRemote.pollTimer) clearInterval(state.miotRemote.pollTimer);
-  if (state.miotRemote.tickTimer) clearInterval(state.miotRemote.tickTimer);
+  const r = state.miotRemote;
+  if (!r) return;
+  if (r.pollTimer) clearInterval(r.pollTimer);
+  if (r.tickTimer) clearInterval(r.tickTimer);
+  // 通知远端音响停止播放并清空播放地址
+  miotPost('/mina/pause', { account_id: r.accountId, device_id: r.deviceId }, r.token).catch(() => {});
   state.miotRemote = null;
   updateRemoteUI(false);
+  // 重置播放状态为停止，让用户手动决定是否继续本地播放
+  updatePlayState(false);
+  const seek = document.getElementById('playerFullSeek');
+  const cur = document.getElementById('playerFullCur');
+  if (seek) seek.value = '0';
+  if (cur) cur.textContent = formatDuration(0);
 }
 
 function updateRemoteUI(isRemote) {
@@ -521,11 +550,14 @@ function updateRemoteUI(isRemote) {
 
 function tickMiotProgress() {
   const r = state.miotRemote;
-  if (!r || !r.isPlaying || r.syncDuration <= 0) return;
+  if (!r || !r.isPlaying) return;
+
+  const totalDur = getChapterDuration(state.currentChapter);
+  if (totalDur <= 0) return;
 
   const elapsed = (Date.now() - r.syncTime) / 1000;
-  const position = Math.min(r.syncPosition + elapsed, r.syncDuration);
-  const pct = (position / r.syncDuration) * 100;
+  const position = Math.min(r.syncPosition + elapsed, totalDur);
+  const pct = (position / totalDur) * 100;
 
   const seek = document.getElementById('playerFullSeek');
   const cur = document.getElementById('playerFullCur');
@@ -542,37 +574,64 @@ async function pollMiotStatus() {
     if (!data.success || !data.data) return;
 
     const d = data.data;
-    const position = d.position || 0;
+    let position = d.position || 0;
     const duration = d.duration || 0;
     const isPlaying = d.state === 'playing';
+
+    const totalDur = getChapterDuration(state.currentChapter) || duration;
+
+    // 如果 miot 返回了 0 位置（章节结束），用本地时长作为结束位置
+    if (totalDur > 0 && position === 0 && !isPlaying) {
+      position = totalDur;
+    }
 
     r.isPlaying = isPlaying;
     r.syncPosition = position;
     r.syncTime = Date.now();
     r.syncDuration = duration;
 
-    // 更新进度条
+    // 更新进度条（总时长使用本地章节时长）
     const seek = document.getElementById('playerFullSeek');
     const cur = document.getElementById('playerFullCur');
     const dur = document.getElementById('playerFullDur');
-    if (seek && duration > 0) seek.value = String((position / duration) * 100);
+    if (seek && totalDur > 0) seek.value = String((position / totalDur) * 100);
     if (cur) cur.textContent = formatDuration(position);
-    if (dur) dur.textContent = formatDuration(duration);
+    if (dur) dur.textContent = formatDuration(totalDur);
 
     // 更新播放/暂停按钮 + 封面旋转
     updatePlayState(isPlaying);
 
-    // 保存进度到本地
-    if (state.currentBookForPlayer && state.currentChapter && duration > 0) {
-      saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, position, duration);
+    // 保存进度到本地（时长用本地值）
+    if (state.currentBookForPlayer && state.currentChapter && totalDur > 0) {
+      saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, position, totalDur);
     }
 
-    // 播放完毕 → 自动推下一章
-    if (duration > 0 && position >= duration - 2) {
-      pushNextChapterToMiot();
+    // 播放完毕 → 自动推下一章（基于本地时长判断）
+    if (totalDur > 0 && position >= totalDur - 2) {
+      // 防止重复推送（可能多个轮询周期都满足条件）
+      if (r._pushing) return;
+      r._pushing = true;
+
+      // 集数定时：遥控模式下也需要递减计数
+      if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
+        state.sleepTimer.chaptersRemaining--;
+        updateSleepTimerUI();
+        if (state.sleepTimer.chaptersRemaining <= 0) {
+          miotPost('/mina/pause', { account_id: r.accountId, device_id: r.deviceId }, r.token).catch(() => {});
+          r.isPlaying = false;
+          updatePlayState(false);
+          cancelSleepTimer();
+          showToast('定时关闭：已播放完设定集数');
+          r._pushing = false;
+          return;
+        }
+      }
+      await pushNextChapterToMiot();
+      r._pushing = false;
     }
   } catch (e) {
     // 轮询失败静默忽略
+    if (r) r._pushing = false;
   }
 }
 
@@ -587,6 +646,11 @@ async function pushNextChapterToMiot() {
   }
   const next = chapters[idx + 1];
   state.currentChapter = next;
+  // 重置同步位置，避免 tickMiotProgress 用旧章节的结束位置叠加
+  if (state.miotRemote) {
+    state.miotRemote.syncPosition = 0;
+    state.miotRemote.syncTime = Date.now();
+  }
   updatePlayerInfo();
   await pushChapterUrlToMiot(state.currentBookForPlayer, next);
 }
@@ -595,13 +659,13 @@ async function pushChapterUrlToMiot(book, chapter) {
   const r = state.miotRemote;
   if (!r) return;
 
+  // 进入遥控模式后音频已暂停，audio.src 不会改变，直接用它做正则替换
   const audio = state.audioEl || ensureAudio();
   if (!audio || !audio.src) {
     showToast('播放地址不可用');
     return;
   }
 
-  // 从当前 audio.src 替换 chapterId 得到目标章节的完整 URL
   const chapterPattern = /\/chapters\/[^/]+\/audio/;
   const audioUrl = audio.src.replace(chapterPattern, `/chapters/${chapter.id}/audio`);
 
@@ -648,6 +712,10 @@ export async function miotPrevChapter() {
   if (idx > 0) {
     const prev = chapters[idx - 1];
     state.currentChapter = prev;
+    if (state.miotRemote) {
+      state.miotRemote.syncPosition = 0;
+      state.miotRemote.syncTime = Date.now();
+    }
     updatePlayerInfo();
     await pushChapterUrlToMiot(state.currentBookForPlayer, prev);
   }
@@ -675,6 +743,10 @@ export async function pushToMiot() {
     const miotPlugin = (json.plugins || []).find(p => p.entry_path === 'miot' && p.status === 'active');
     if (!miotPlugin) {
       showToast('请先安装并启用"智能音箱"插件');
+      return;
+    }
+    if (!miotPlugin.version || !versionGte(miotPlugin.version, '2026.6.16')) {
+      showToast('请将"智能音箱"插件更新至 v2026.6.16 或更高版本');
       return;
     }
   } catch (e) {
@@ -759,6 +831,15 @@ async function doPushToDevice(accountId, deviceId, token) {
   const chapter = state.currentChapter;
   if (!book || !chapter) return;
 
+  // 在异步开始前锁定 audio.src（浏览器已解析为绝对 URL）
+  // 防止期间音频自然结束触发 ended 改变 audio.src
+  const audio = state.audioEl || ensureAudio();
+  if (!audio || !audio.src) {
+    showToast('当前没有播放内容');
+    return;
+  }
+  const lockedUrl = audio.src;
+
   // 先检查转码状态
   const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
   try {
@@ -780,21 +861,13 @@ async function doPushToDevice(accountId, deviceId, token) {
     }
   } catch (e) {}
 
-  // audio.src 已经是完整 URL，直接使用
-  const audio = state.audioEl || ensureAudio();
-  if (!audio || !audio.src) {
-    showToast('当前没有播放内容');
-    return;
-  }
-  const audioUrl = audio.src;
-
   showToast('正在推送到音响...');
 
   try {
     const json = await miotPost('/mina/play-url', {
       account_id: accountId,
       device_id: deviceId,
-      url: audioUrl,
+      url: lockedUrl,
     }, token);
     if (json.success) {
       showToast('已推送到音响');
