@@ -7,7 +7,7 @@ import { safeId, getExt } from '../utils/helpers';
 const INCOMPATIBLE_EXTS = new Set(['.wma']);
 
 /** 缓存目录（相对于插件工作目录） */
-const CACHE_DIR = '.cache/transcode';
+export const CACHE_DIR = '.cache/transcode';
 
 /** ffmpeg 可用性缓存 */
 let _ffmpegOk: boolean | null = null;
@@ -60,6 +60,66 @@ export async function isCacheReady(inputPath: string): Promise<boolean> {
   if (!needsTranscode(inputPath)) return true;
   const cp = cacheKey(inputPath);
   return await songloft.fs.exists(cp).catch(() => false);
+}
+
+/** 获取缓存目录信息 */
+export async function getCacheInfo(): Promise<{ fileCount: number; totalSize: number }> {
+  let fileCount = 0;
+  let totalSize = 0;
+  try {
+    const entries = (await songloft.fs.readdir(CACHE_DIR)) || [];
+    for (const e of entries) {
+      if (!e.isDir) {
+        const st = await songloft.fs.stat(`${CACHE_DIR}/${e.name}`).catch(() => null);
+        if (st) {
+          fileCount++;
+          totalSize += Number(st.size || 0);
+        }
+      }
+    }
+  } catch {
+    // 目录不存在或无权限访问
+  }
+  return { fileCount, totalSize };
+}
+
+/** 清理缓存目录 */
+export async function clearCache(): Promise<{ deletedCount: number }> {
+  let deletedCount = 0;
+  try {
+    const entries = (await songloft.fs.readdir(CACHE_DIR)) || [];
+    for (const e of entries) {
+      if (!e.isDir) {
+        await songloft.fs.unlink(`${CACHE_DIR}/${e.name}`).catch(() => {});
+        deletedCount++;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return { deletedCount };
+}
+
+/** 用 ffprobe 获取音频精确时长（秒），不写文件缓存，结果由调用方持久化 */
+export async function probeDuration(filePath: string): Promise<number> {
+  await ensureFFmpeg();
+
+  const r = await songloft.command.exec('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'csv=p=0',
+    filePath,
+  ], { timeout: 30000 });
+
+  if (r.exitCode !== 0) {
+    songloft.log.warn(`[probe失败] ${filePath}: ${r.stderr}`);
+    return 0;
+  }
+
+  const duration = parseFloat((r.stdout || '').trim());
+  if (!isFinite(duration) || duration <= 0) return 0;
+
+  return Math.floor(duration);
 }
 
 /** 检测 ffmpeg 是否可用（结果缓存） */

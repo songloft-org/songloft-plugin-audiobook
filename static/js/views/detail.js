@@ -46,6 +46,7 @@ export function renderBookDetail(book) {
         <div class="book-hero-actions">
           <button class="btn btn-primary" id="btnPlayFirst">▶ 从第一集播放</button>
           <button class="btn btn-ghost" id="btnToggleFav">${book.isFavorite ? '★ 已收藏' : '☆ 收藏'}</button>
+          <button class="btn btn-ghost" id="btnRefreshBook">🔄 刷新</button>
         </div>
       </div>
     </div>
@@ -94,6 +95,9 @@ export function renderBookDetail(book) {
       if (idx >= 0) state.books[idx].isFavorite = data.isFavorite;
       renderBookDetail(state.currentBook);
     } catch (err) { showToast(err.message); }
+  });
+  document.getElementById('btnRefreshBook').addEventListener('click', () => {
+    loadBookDetail(book.id);
   });
   el.querySelectorAll('.chapter-row').forEach((row) => {
     row.addEventListener('click', () => {

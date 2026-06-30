@@ -489,7 +489,10 @@ function enterMiotRemote(accountId, deviceId, token) {
   // 先退出旧的遥控模式
   exitMiotRemote();
 
-  state.miotRemote = { accountId, deviceId, token, pollTimer: null, tickTimer: null, isPlaying: true, syncPosition: 0, syncTime: 0, syncDuration: 0, _pushing: false };
+  // 模式切换，取消旧定时器
+  cancelSleepTimer();
+
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true, _pushing: false };
 
   // 暂停本地音频（优先执行，防止期间 ended 事件干扰）
   const audio = state.audioEl;
@@ -499,17 +502,17 @@ function enterMiotRemote(accountId, deviceId, token) {
   updateRemoteUI(true);
   updatePlayState(true);
 
-  // 启动心跳轮询 + 平滑进度 ticker
+  // 启动轮询（/mina/status 底层有 4s 缓存 + 服务端外推，1s 轮询足够平滑）
   pollMiotStatus();
-  state.miotRemote.pollTimer = setInterval(pollMiotStatus, 5000);
-  state.miotRemote.tickTimer = setInterval(tickMiotProgress, 1000);
+  state.miotRemote.pollTimer = setInterval(pollMiotStatus, 1000);
 }
 
 export function exitMiotRemote() {
   const r = state.miotRemote;
   if (!r) return;
+  // 模式切换，取消旧定时器
+  cancelSleepTimer();
   if (r.pollTimer) clearInterval(r.pollTimer);
-  if (r.tickTimer) clearInterval(r.tickTimer);
   // 通知远端音响停止播放并清空播放地址
   miotPost('/mina/pause', { account_id: r.accountId, device_id: r.deviceId }, r.token).catch(() => {});
   state.miotRemote = null;
@@ -548,37 +551,19 @@ function updateRemoteUI(isRemote) {
   if (badge) badge.hidden = !isRemote;
 }
 
-function tickMiotProgress() {
-  const r = state.miotRemote;
-  if (!r || !r.isPlaying) return;
-
-  const totalDur = getChapterDuration(state.currentChapter);
-  if (totalDur <= 0) return;
-
-  const elapsed = (Date.now() - r.syncTime) / 1000;
-  const position = Math.min(r.syncPosition + elapsed, totalDur);
-  const pct = (position / totalDur) * 100;
-
-  const seek = document.getElementById('playerFullSeek');
-  const cur = document.getElementById('playerFullCur');
-  if (seek) seek.value = String(pct);
-  if (cur) cur.textContent = formatDuration(position);
-}
-
 async function pollMiotStatus() {
   const r = state.miotRemote;
   if (!r) return;
 
   try {
-    const data = await miotGet(`/player/status?account_id=${r.accountId}&device_id=${r.deviceId}`, r.token);
+    const data = await miotGet(`/mina/status?account_id=${r.accountId}&device_id=${r.deviceId}`, r.token);
     if (!data.success || !data.data) return;
 
     const d = data.data;
     let position = d.position || 0;
-    const duration = d.duration || 0;
-    const isPlaying = d.state === 'playing';
+    const isPlaying = d.is_playing ?? (d.state === 'playing');
 
-    const totalDur = getChapterDuration(state.currentChapter) || duration;
+    const totalDur = getChapterDuration(state.currentChapter);
 
     // 如果 miot 返回了 0 位置（章节结束），用本地时长作为结束位置
     if (totalDur > 0 && position === 0 && !isPlaying) {
@@ -586,9 +571,6 @@ async function pollMiotStatus() {
     }
 
     r.isPlaying = isPlaying;
-    r.syncPosition = position;
-    r.syncTime = Date.now();
-    r.syncDuration = duration;
 
     // 更新进度条（总时长使用本地章节时长）
     const seek = document.getElementById('playerFullSeek');
@@ -646,11 +628,6 @@ async function pushNextChapterToMiot() {
   }
   const next = chapters[idx + 1];
   state.currentChapter = next;
-  // 重置同步位置，避免 tickMiotProgress 用旧章节的结束位置叠加
-  if (state.miotRemote) {
-    state.miotRemote.syncPosition = 0;
-    state.miotRemote.syncTime = Date.now();
-  }
   updatePlayerInfo();
   await pushChapterUrlToMiot(state.currentBookForPlayer, next);
 }
@@ -664,6 +641,19 @@ async function pushChapterUrlToMiot(book, chapter) {
   if (!audio || !audio.src) {
     showToast('播放地址不可用');
     return;
+  }
+
+  // 获取新章节的精确时长，便于遥控轮询判断章节结束
+  if (!state.realDurations[chapter.id]) {
+    try {
+      const token = getAuthToken();
+      const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
+      const resp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
+      const data = await resp.json();
+      if (data.data && data.data.duration > 0) {
+        state.realDurations[chapter.id] = data.data.duration;
+      }
+    } catch (e) {}
   }
 
   const chapterPattern = /\/chapters\/[^/]+\/audio/;
@@ -712,10 +702,6 @@ export async function miotPrevChapter() {
   if (idx > 0) {
     const prev = chapters[idx - 1];
     state.currentChapter = prev;
-    if (state.miotRemote) {
-      state.miotRemote.syncPosition = 0;
-      state.miotRemote.syncTime = Date.now();
-    }
     updatePlayerInfo();
     await pushChapterUrlToMiot(state.currentBookForPlayer, prev);
   }
@@ -843,25 +829,29 @@ async function doPushToDevice(accountId, deviceId, token) {
   // 先检查转码状态
   const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
   try {
-    let checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
-    let checkData = await checkResp.json();
-    if (checkData.data && !checkData.data.ready) {
-      showToast('音频转码中，请稍候...');
-      fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload`));
-      for (let i = 0; i < 60; i++) {
-        await new Promise((r) => setTimeout(r, 2000));
-        checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
-        checkData = await checkResp.json();
-        if (checkData.data && checkData.data.ready) break;
+      let checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
+      let checkData = await checkResp.json();
+      if (checkData.data && !checkData.data.ready) {
+        showToast('音频转码中，请稍候...');
+        fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload`));
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          checkResp = await fetch(withToken(`./api/books/${book.id}/chapters/${chapter.id}/preload?check=1`));
+          checkData = await checkResp.json();
+          if (checkData.data && checkData.data.ready) break;
+        }
+        if (!checkData.data || !checkData.data.ready) {
+          showToast('转码超时，请稍后重试');
+          return;
+        }
       }
-      if (!checkData.data || !checkData.data.ready) {
-        showToast('转码超时，请稍后重试');
-        return;
+      // 保存精确时长，供遥控轮询判断章节结束
+      if (checkData.data && checkData.data.duration > 0) {
+        state.realDurations[chapter.id] = checkData.data.duration;
       }
-    }
-  } catch (e) {}
+    } catch (e) {}
 
-  showToast('正在推送到音响...');
+    showToast('正在推送到音响...');
 
   try {
     const json = await miotPost('/mina/play-url', {

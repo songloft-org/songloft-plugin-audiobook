@@ -2,6 +2,7 @@
 import { state, switchView } from './state.js';
 import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed, openSleepTimer, closeSleepTimer, startSleepTimer, cancelSleepTimer, openCustomPicker, closeCustomPicker, pushToMiot, closeDevicePicker, exitMiotRemote } from './views/player.js';
 import { loadSnapshot, loadBooks, loadRecentlyPlayed, triggerRescan } from './views/home.js';
+import { openSettings, closeSettings, cleanCache } from './views/settings.js';
 
 // ==================== 绑定事件 ====================
 
@@ -133,6 +134,14 @@ function bindEvents() {
     if (e.target === e.currentTarget) closeDevicePicker();
   });
   document.getElementById('btnExitRemote').addEventListener('click', exitMiotRemote);
+
+  // 设置
+  document.getElementById('btnSettings').addEventListener('click', openSettings);
+  document.getElementById('btnSettingsClose').addEventListener('click', closeSettings);
+  document.getElementById('settingsOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeSettings();
+  });
+  document.getElementById('btnCleanCache').addEventListener('click', cleanCache);
 }
 
 // ==================== 启动 ====================

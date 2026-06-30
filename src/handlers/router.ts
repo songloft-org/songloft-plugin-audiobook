@@ -4,7 +4,7 @@ import { createRouter } from '@songloft/plugin-sdk';
 import type { HTTPRequest } from '@songloft/plugin-sdk';
 import { parseQuery, jsonResponse, errorResponse, getImageMime } from '../utils/helpers';
 import { BookManager } from '../services/bookManager';
-import { ensurePlayablePath, needsTranscode, isCacheReady } from '../services/transcoder';
+import { ensurePlayablePath, needsTranscode, isCacheReady, getCacheInfo, clearCache, probeDuration } from '../services/transcoder';
 
 type AppRouter = ReturnType<typeof createRouter>;
 
@@ -195,9 +195,14 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
 
       if (checkOnly) {
         const ready = await isCacheReady(chapter.fileRelPath);
+        // 优先用已持久化的真实时长，避免重复 ffprobe
+        const progress = bm.getProgress(params.id, params.chapterId);
+        const duration = progress.duration > 0
+          ? progress.duration
+          : await probeDuration(chapter.fileRelPath);
         return jsonResponse({
           success: true,
-          data: { ready, transcoding: !ready && pendingTranscodes.has(chapter.fileRelPath) },
+          data: { ready, transcoding: !ready && pendingTranscodes.has(chapter.fileRelPath), duration },
         });
       }
 
@@ -212,6 +217,14 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       ensurePlayablePath(chapter.fileRelPath)
         .then(() => { pendingTranscodes.delete(chapter.fileRelPath); })
         .catch(() => { pendingTranscodes.delete(chapter.fileRelPath); });
+
+      // 提前 probe 精确时长并持久化，避免切歌时现等 ffprobe
+      const p = bm.getProgress(params.id, params.chapterId);
+      if (!p.duration) {
+        probeDuration(chapter.fileRelPath).then((d) => {
+          if (d > 0) bm.setProgress(params.id, params.chapterId, 0, d).catch(() => {});
+        });
+      }
 
       return jsonResponse({ success: true, data: { ready: false, transcoding: true } });
     }
@@ -279,4 +292,16 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       }
     }
   );
+
+  // ---------- GET /api/cache/info —— 缓存信息 ----------
+  router.get('/api/cache/info', async () => {
+    const info = await getCacheInfo();
+    return jsonResponse({ success: true, data: info });
+  });
+
+  // ---------- POST /api/cache/clean —— 清理缓存 ----------
+  router.post('/api/cache/clean', async () => {
+    const result = await clearCache();
+    return jsonResponse({ success: true, data: result });
+  });
 }

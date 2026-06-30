@@ -31,6 +31,7 @@
 
       <div class="actions">
         <button id="btnRescan" class="btn btn-ghost" title="重新扫描本地目录">加载</button>
+        <button id="btnSettings" class="btn btn-ghost" title="设置">⚙️</button>
       </div>
     </header>
 
@@ -308,6 +309,34 @@
         <div class="edit-actions">
           <button class="btn btn-ghost" id="editCancelBtn">取消</button>
           <button class="btn btn-primary" id="editSaveBtn">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div class="playlist-overlay" id="settingsOverlay" hidden>
+      <div class="playlist-sheet settings-sheet">
+        <div class="playlist-sheet-header">
+          <span>设置</span>
+          <button class="btn btn-ghost" id="btnSettingsClose">✕</button>
+        </div>
+        <div class="settings-body" id="settingsBody">
+          <div class="settings-section">
+            <div class="settings-section-title">转码缓存</div>
+            <div class="settings-cache-info" id="settingsCacheInfo">加载中...</div>
+            <button class="btn btn-ghost settings-clean-btn" id="btnCleanCache">🗑️ 清理缓存</button>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-title">关于</div>
+            <div class="settings-about-info">
+              <div class="settings-about-row"><span class="settings-about-label">版本</span><span id="settingsVersion">1.0.6</span></div>
+              <div class="settings-about-row"><span class="settings-about-label">作者</span><span>MiMusic Team</span></div>
+              <div class="settings-about-row"><span class="settings-about-label">许可</span><span>Apache-2.0</span></div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <a class="settings-project-link" href="https://github.com/mimusic-org/mimusic-jsplugin-releases/tree/audiobook" target="_blank" rel="noopener">📝 项目主页 · 提交 Issue</a>
+          </div>
         </div>
       </div>
     </div>
