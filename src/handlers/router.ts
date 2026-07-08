@@ -148,7 +148,8 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       const q = parseQuery(req.query || '');
       const position = Number(payload.position !== undefined ? payload.position : q.position || 0);
       const duration = Number(payload.duration !== undefined ? payload.duration : q.duration || 0);
-      const p = await bm.setProgress(params.id, params.chapterId, position, duration);
+      const completed = payload.completed !== undefined ? Boolean(payload.completed) : undefined;
+      const p = await bm.setProgress(params.id, params.chapterId, position, duration, completed);
       return jsonResponse({
         success: true,
         data: { bookId: params.id, chapterId: params.chapterId, progress: p },

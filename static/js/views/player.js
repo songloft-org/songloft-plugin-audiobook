@@ -49,6 +49,8 @@ export function ensureAudio() {
   el.addEventListener('ended', () => {
     if (!state.currentBookForPlayer || !state.currentChapter) return;
 
+    saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, el.duration || 0, el.duration || 0, true);
+
     if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
       state.sleepTimer.chaptersRemaining--;
       updateSleepTimerUI();
@@ -70,8 +72,14 @@ export function ensureAudio() {
     if (state.currentChapter && isFinite(el.duration)) {
       state.realDurations[state.currentChapter.id] = el.duration;
     }
-    if (state.currentChapter && state.currentChapter.progress && state.currentChapter.progress.position > 0) {
-      try { el.currentTime = state.currentChapter.progress.position; } catch (e) {}
+    if (state.currentChapter && state.currentChapter.progress) {
+      if (state.currentChapter.progress.completed) {
+        try { el.currentTime = 0; } catch (e) {}
+        state.currentChapter.progress.completed = false;
+        state.currentChapter.progress.position = 0;
+      } else if (state.currentChapter.progress.position > 0) {
+        try { el.currentTime = state.currentChapter.progress.position; } catch (e) {}
+      }
     }
   });
   return el;
@@ -157,11 +165,13 @@ async function preloadNextChapter() {
   fetch(withToken(`./api/books/${state.currentBookForPlayer.id}/chapters/${next.id}/preload`));
 }
 
-function saveProgress(bookId, chapterId, position, duration) {
+function saveProgress(bookId, chapterId, position, duration, completed) {
+  const body = { position, duration };
+  if (completed !== undefined) body.completed = completed;
   api(`/api/books/${bookId}/chapters/${chapterId}/progress`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ position, duration }),
+    body: JSON.stringify(body),
   }).catch(() => {});
 }
 

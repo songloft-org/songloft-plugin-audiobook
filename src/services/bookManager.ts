@@ -212,13 +212,15 @@ export class BookManager {
     bookId: string,
     chapterId: string,
     position: number,
-    duration: number
+    duration: number,
+    completed?: boolean
   ): Promise<ChapterProgress> {
     const key = `${bookId}::${chapterId}`;
     const p: ChapterProgress = {
       position: Math.max(0, Math.floor(position)),
       duration: Math.max(0, Math.floor(duration)),
       updatedAt: Date.now(),
+      ...(completed !== undefined ? { completed } : {}),
     };
     this.progress[key] = p;
     try {

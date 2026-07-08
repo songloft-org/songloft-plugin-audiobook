@@ -40,6 +40,7 @@ export interface ChapterProgress {
   position: number;
   duration: number;
   updatedAt: number;
+  completed?: boolean;
 }
 
 /** 书籍元数据（对应 metadata.json） */
