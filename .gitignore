@@ -5,3 +5,4 @@ dist/
 .mimusic-dev.json
 /.claude/
 /src/generated/
+*.iml
