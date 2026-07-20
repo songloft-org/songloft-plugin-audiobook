@@ -78,14 +78,10 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     return jsonResponse({ success: true, data: { items: enriched } });
   });
 
-  // ---------- POST /api/rescan —— 触发重新扫描 ----------
+  // ---------- POST /api/rescan —— 异步触发重新扫描（防 504 超时） ----------
   router.post('/api/rescan', async () => {
-    const r = await bm.rescan();
-    return jsonResponse({
-      success: true,
-      message: `重新扫描完成：${r.totalBooks} 本书，${r.totalChapters} 章节`,
-      data: r,
-    });
+    bm.rescan().catch((err) => songloft.log.warn(`后台重扫异常: ${String(err)}`));
+    return jsonResponse({ success: true, data: { scanning: true } });
   });
 
   // ---------- GET /api/books/:id —— 书籍详情（含章节） ----------

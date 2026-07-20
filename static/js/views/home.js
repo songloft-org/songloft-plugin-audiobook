@@ -179,9 +179,21 @@ export async function triggerRescan() {
   const btn = document.getElementById('btnRescan');
   if (btn) { btn.disabled = true; btn.textContent = '扫描中...'; }
   try {
-    const data = await api('/api/rescan', { method: 'POST' });
+    await api('/api/rescan', { method: 'POST' });
+    showToast('后台扫描中...');
+    let snap;
+    const pollStart = Date.now();
+    while (true) {
+      await new Promise((r) => setTimeout(r, 1000));
+      snap = await api('/api/snapshot');
+      if (!snap.scanning) break;
+      if (Date.now() - pollStart > 180000) {
+        snap = { totalBooks: 0 };
+        break;
+      }
+    }
     state.page = 1;
-    showToast(`扫描完成：${data.totalBooks} 本书，${data.totalChapters} 章节`);
+    showToast(`扫描完成：${snap.totalBooks} 本书`);
     await loadBooks();
     await loadRecentlyPlayed();
   } catch (e) {

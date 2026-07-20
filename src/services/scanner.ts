@@ -50,6 +50,11 @@ async function walkDir(
     const fullPath = `${dirPath}/${e.name}`;
     if (e.isDir) {
       if (depth < maxDepth) {
+        try {
+          await songloft.fs.stat(fullPath);
+        } catch {
+          continue;
+        }
         const sub = await walkDir(fullPath, depth + 1, maxDepth);
         audios.push(...sub.audios);
         if (!coverRel && sub.coverRel) coverRel = sub.coverRel;
@@ -143,6 +148,12 @@ async function scanBookFolder(
 ): Promise<{ book: Book; chapters: Chapter[] } | null> {
   const folderRel = `${libraryPath}/${folder}`;
 
+  try {
+    await songloft.fs.stat(folderRel);
+  } catch {
+    return null;
+  }
+
   const result = await walkDir(folderRel, 0, MAX_SCAN_DEPTH);
 
   if (result.audios.length === 0) return null;
@@ -177,6 +188,8 @@ async function scanBookFolder(
       songloft.log.warn(`stat 失败: ${rel} (${String(err)})`);
     }
   }
+
+  if (chapters.length === 0) return null;
 
   let coverRel = result.coverRel;
   let descRel = result.descRel;
@@ -283,6 +296,7 @@ async function buildMiscBook(
     title: '未分类音频',
     author: '未知',
     coverUrl: null,
+    coverRatio: '',
     description: '有声书库根目录下的零散音频文件',
     category: '未分类',
     tags: [],

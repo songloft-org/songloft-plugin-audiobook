@@ -32,6 +32,7 @@ export class BookManager {
   };
   private progress: Record<string, ChapterProgress> = {};
   private scanning = false;
+  private generation = 0;
 
   async init(): Promise<void> {
     // 1) 加载设置
@@ -77,8 +78,10 @@ export class BookManager {
   private async scanInBackground(): Promise<void> {
     if (this.scanning) return;
     this.scanning = true;
+    const gen = ++this.generation;
     try {
       const state = await scanLibrary();
+      if (gen !== this.generation) return;
       this.books = state.books;
       this.chaptersByBookId = state.chaptersByBookId;
       this.scannedAt = Date.now();
@@ -169,7 +172,7 @@ export class BookManager {
     return Array.from(set);
   }
 
-  getSnapshot(): StateSnapshot & { recentlyPlayed: PluginSettings['recentlyPlayed']; settings: PluginSettings } {
+  getSnapshot(): StateSnapshot & { recentlyPlayed: PluginSettings['recentlyPlayed']; settings: PluginSettings; scanning: boolean } {
     return {
       books: this.books,
       totalBooks: this.books.length,
@@ -178,6 +181,7 @@ export class BookManager {
       scannedAt: this.scannedAt,
       recentlyPlayed: this.settings.recentlyPlayed,
       settings: { ...this.settings },
+      scanning: this.scanning,
     };
   }
 
@@ -257,18 +261,29 @@ export class BookManager {
     }
   }
 
-  // ---------- 重新扫描 ----------
+  // ---------- 重新扫描（异步触发，防超时） ----------
 
-  async rescan(): Promise<{ totalBooks: number; totalChapters: number }> {
-    const state = await scanLibrary();
-    this.books = state.books;
-    this.chaptersByBookId = state.chaptersByBookId;
-    this.scannedAt = Date.now();
-    await saveLibraryIndex(state);
+  isScanning(): boolean {
+    return this.scanning;
+  }
 
-    let totalChapters = 0;
-    for (const b of this.books) totalChapters += b.chapterCount;
-    return { totalBooks: this.books.length, totalChapters };
+  async rescan(): Promise<void> {
+    ++this.generation;
+    this.scanning = true;
+    const gen = this.generation;
+    try {
+      const state = await scanLibrary();
+      if (gen !== this.generation) return;
+      this.books = state.books;
+      this.chaptersByBookId = state.chaptersByBookId;
+      this.scannedAt = Date.now();
+      await saveLibraryIndex(state);
+      songloft.log.info(`重新扫描完成：${this.books.length} 本书`);
+    } catch (err) {
+      songloft.log.warn(`重新扫描失败: ${String(err)}`);
+    } finally {
+      this.scanning = false;
+    }
   }
 
   getSettings(): PluginSettings {

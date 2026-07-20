@@ -148,7 +148,7 @@ export function hashString(s: string): string {
 export function safeId(path: string): string {
   const base = path.replace(/\\/g, '/');
   const cleaned = base
-    .replace(/[^a-zA-Z0-9-_]/g, '-')
+    .replace(/[^a-zA-Z0-9-\u4e00-\u9fff_]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .toLowerCase();
