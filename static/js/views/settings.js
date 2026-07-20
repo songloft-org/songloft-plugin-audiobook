@@ -7,6 +7,18 @@ export function openSettings() {
   if (!overlay) return;
   overlay.hidden = false;
   loadCacheInfo();
+  loadVersion();
+}
+
+async function loadVersion() {
+  const el = document.getElementById('settingsVersion');
+  if (!el) return;
+  try {
+    const data = await api('/api/snapshot');
+    el.textContent = data.version || '-';
+  } catch {
+    el.textContent = '-';
+  }
 }
 
 export function closeSettings() {

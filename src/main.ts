@@ -4,6 +4,7 @@ import type { HTTPRequest, HTTPResponse } from '@songloft/plugin-sdk';
 import { BookManager } from './services/bookManager';
 import { registerHandlers } from './handlers/router';
 import { isFFmpegAvailable } from './services/transcoder';
+import { PLUGIN_VERSION } from './generated/version';
 
 const router = createRouter();
 let bookManager: BookManager | null = null;
@@ -20,7 +21,7 @@ async function onInit(): Promise<void> {
     }
   }).catch(() => {});
 
-  bookManager = new BookManager();
+  bookManager = new BookManager(PLUGIN_VERSION);
   await bookManager.init();
   registerHandlers(router, bookManager);
   songloft.log.info('有声书插件：初始化完成');

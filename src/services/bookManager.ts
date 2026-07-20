@@ -33,6 +33,11 @@ export class BookManager {
   private progress: Record<string, ChapterProgress> = {};
   private scanning = false;
   private generation = 0;
+  private readonly version: string;
+
+  constructor(version: string) {
+    this.version = version;
+  }
 
   async init(): Promise<void> {
     // 1) 加载设置
@@ -172,7 +177,7 @@ export class BookManager {
     return Array.from(set);
   }
 
-  getSnapshot(): StateSnapshot & { recentlyPlayed: PluginSettings['recentlyPlayed']; settings: PluginSettings; scanning: boolean } {
+  getSnapshot(): StateSnapshot & { recentlyPlayed: PluginSettings['recentlyPlayed']; settings: PluginSettings; scanning: boolean; version: string } {
     return {
       books: this.books,
       totalBooks: this.books.length,
@@ -182,6 +187,7 @@ export class BookManager {
       recentlyPlayed: this.settings.recentlyPlayed,
       settings: { ...this.settings },
       scanning: this.scanning,
+      version: this.version,
     };
   }
 

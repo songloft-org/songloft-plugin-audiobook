@@ -1,9 +1,10 @@
 {
   "name": "audiobook",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "有声书插件：本地有声书资源管理与播放",
   "private": true,
   "scripts": {
+    "prebuild": "node scripts/prebuild.mjs",
     "build": "songloft-plugin build",
     "validate": "songloft-plugin validate"
   },
