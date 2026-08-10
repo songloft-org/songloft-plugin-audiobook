@@ -535,7 +535,7 @@ function enterMiotRemote(accountId, deviceId, token) {
   // 模式切换，取消旧定时器
   cancelSleepTimer();
 
-  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true, _pushing: false };
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true, _pushing: false, _estimate: 0, _estBase: null };
 
   // 暂停本地音频（优先执行，防止期间 ended 事件干扰）
   const audio = state.audioEl;
@@ -585,9 +585,9 @@ function updateRemoteUI(isRemote) {
   const btnExit = document.getElementById('btnExitRemote');
   if (btnExit) btnExit.style.display = isRemote ? '' : 'none';
 
-  // 进度条：遥控模式下禁用拖动
+  // 进度条：遥控模式下允许拖动（seek 推送音响，需宿主支持 serveFile.seekSeconds）
   const seek = document.getElementById('playerFullSeek');
-  if (seek) seek.disabled = isRemote;
+  if (seek) seek.disabled = false;
 
   // 遥控模式标签
   const badge = document.getElementById('remoteBadge');
@@ -608,6 +608,24 @@ async function pollMiotStatus() {
 
     const totalDur = getChapterDuration(state.currentChapter);
 
+    // 本地估算播放位置：/mina/status 底层约 4s 缓存，播完瞬间的 position 窗口太短会漏判，
+    // 用播放状态 + 轮询时间差累加估算，仅用于"播完"判定
+    const now = Date.now();
+    if (isPlaying && r._estBase && r._estimate !== undefined) {
+      const dt = (now - r._estBase) / 1000;
+      if (dt > 0 && dt < 15) r._estimate += dt; // 间隔异常（请求超时）不累加
+    }
+    r._estBase = now;
+    if (r._estimate === undefined) r._estimate = position > 0 ? position : 0;
+    // 播放中云端位置从接近末尾大幅回退 → 音箱循环重播当前曲目，视为播完
+    const replayed = totalDur > 0 && isPlaying && r._lastCloudPos !== undefined && position > 0
+      && r._lastCloudPos > totalDur * 0.6 && position < r._lastCloudPos - 30;
+    r._lastCloudPos = position;
+    // 云端位置与估算偏差过大时以云端校准（如音箱端拖动、外推刷新）；循环重播场景跳过校准
+    if (!replayed && position > 0 && Math.abs(position - r._estimate) > 20) {
+      r._estimate = position;
+    }
+
     // 如果 miot 返回了 0 位置（章节结束），用本地时长作为结束位置
     if (totalDur > 0 && position === 0 && !isPlaying) {
       position = totalDur;
@@ -615,12 +633,12 @@ async function pollMiotStatus() {
 
     r.isPlaying = isPlaying;
 
-    // 更新进度条（总时长使用本地章节时长）
+    // 更新进度条（总时长使用本地章节时长）；拖动中由本地预览驱动，轮询不覆盖
     const seek = document.getElementById('playerFullSeek');
     const cur = document.getElementById('playerFullCur');
     const dur = document.getElementById('playerFullDur');
-    if (seek && totalDur > 0) seek.value = String((position / totalDur) * 100);
-    if (cur) cur.textContent = formatDuration(position);
+    if (!r._seeking && seek && totalDur > 0) seek.value = String((position / totalDur) * 100);
+    if (!r._seeking && cur) cur.textContent = formatDuration(position);
     if (dur) dur.textContent = formatDuration(totalDur);
 
     // 更新播放/暂停按钮 + 封面旋转
@@ -631,11 +649,17 @@ async function pollMiotStatus() {
       saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, position, totalDur);
     }
 
-    // 播放完毕 → 自动推下一章（基于本地时长判断）
-    if (totalDur > 0 && position >= totalDur - 2) {
+    // 播放完毕 → 自动推下一章（循环重播 / 估算位置 / 云端末尾值 三路兜底）
+    const ended = totalDur > 0 && (replayed || r._estimate >= totalDur - 2 || position >= totalDur - 2);
+    if (ended) {
       // 防止重复推送（可能多个轮询周期都满足条件）
       if (r._pushing) return;
       r._pushing = true;
+
+      // 标记当前章节播放完成（供断点续播判断）
+      if (state.currentBookForPlayer && state.currentChapter) {
+        saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, totalDur, totalDur, true);
+      }
 
       // 集数定时：遥控模式下也需要递减计数
       if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
@@ -675,7 +699,7 @@ async function pushNextChapterToMiot() {
   await pushChapterUrlToMiot(state.currentBookForPlayer, next);
 }
 
-async function pushChapterUrlToMiot(book, chapter) {
+async function pushChapterUrlToMiot(book, chapter, seekSeconds) {
   const r = state.miotRemote;
   if (!r) return;
 
@@ -699,8 +723,17 @@ async function pushChapterUrlToMiot(book, chapter) {
     } catch (e) {}
   }
 
+  // 未显式指定 seek 时，按章节已有进度断点续播（已完成则从头）
+  if (seekSeconds === undefined) {
+    const p = chapter.progress;
+    if (p && p.position > 0 && !p.completed) seekSeconds = p.position;
+  }
+
   const chapterPattern = /\/chapters\/[^/]+\/audio/;
-  const audioUrl = audio.src.replace(chapterPattern, `/chapters/${chapter.id}/audio`);
+  let audioUrl = audio.src.replace(chapterPattern, `/chapters/${chapter.id}/audio`);
+  if (seekSeconds && seekSeconds > 0) {
+    audioUrl += (audioUrl.includes('?') ? '&' : '?') + `seek=${Number(seekSeconds)}`;
+  }
 
   try {
     const json = await miotPost('/mina/play-url', {
@@ -709,6 +742,10 @@ async function pushChapterUrlToMiot(book, chapter) {
       url: audioUrl,
     }, r.token);
     if (json.success) {
+      // 重置估算基线：从 seek 位置（或 0）重新开始；清掉云端位置历史，避免误判循环重播
+      r._estimate = seekSeconds && seekSeconds > 0 ? seekSeconds : 0;
+      r._estBase = Date.now();
+      r._lastCloudPos = undefined;
       showToast(`正在播放：${chapter.title}`);
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
@@ -719,6 +756,53 @@ async function pushChapterUrlToMiot(book, chapter) {
 }
 
 // ---------- 遥控按钮 ----------
+
+/** 遥控模式拖动进度条：重新推送当前章节从指定秒起播（宿主 serveFile.seekSeconds） */
+async function miotSeek(seconds) {
+  const r = state.miotRemote;
+  if (!r || !state.currentBookForPlayer || !state.currentChapter) return;
+  const totalDur = getChapterDuration(state.currentChapter);
+  if (!(totalDur > 0)) return;
+  seconds = Math.max(0, Math.min(totalDur, seconds));
+
+  // 立即更新 UI 与本地进度
+  const seek = document.getElementById('playerFullSeek');
+  const cur = document.getElementById('playerFullCur');
+  if (seek) seek.value = String((seconds / totalDur) * 100);
+  if (cur) cur.textContent = formatDuration(seconds);
+  saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, seconds, totalDur);
+
+  if (r._pushing) { r._seeking = false; return; } // 推送中（如自动续播），忽略拖动
+  r._pushing = true;
+  try {
+    await pushChapterUrlToMiot(state.currentBookForPlayer, state.currentChapter, seconds);
+  } finally {
+    r._pushing = false;
+    r._seeking = false;
+  }
+}
+
+// 遥控模式进度条拖动 seek；本地模式由 app.js 的 input 监听处理
+const remoteSeekBar = document.getElementById('playerFullSeek');
+if (remoteSeekBar) {
+  remoteSeekBar.addEventListener('input', () => {
+    const r = state.miotRemote;
+    if (!r) return;
+    const totalDur = getChapterDuration(state.currentChapter);
+    if (!(totalDur > 0)) return;
+    r._seeking = true;
+    r._seekTarget = (parseFloat(remoteSeekBar.value) / 100) * totalDur;
+    const cur = document.getElementById('playerFullCur');
+    if (cur) cur.textContent = formatDuration(r._seekTarget);
+  });
+  remoteSeekBar.addEventListener('change', () => {
+    const r = state.miotRemote;
+    if (!r || r._seekTarget === undefined) return;
+    const target = r._seekTarget;
+    r._seekTarget = undefined;
+    miotSeek(target);
+  });
+}
 
 export async function miotTogglePlay() {
   const r = state.miotRemote;
@@ -868,6 +952,8 @@ async function doPushToDevice(accountId, deviceId, token) {
     return;
   }
   const lockedUrl = audio.src;
+  // 锁定本地播放位置，推送时从断点续播
+  const lockedPos = isFinite(audio.currentTime) ? Math.floor(audio.currentTime) : 0;
 
   // 先检查转码状态
   const withToken = (url) => token ? `${url}${url.includes('?') ? '&' : '?'}access_token=${encodeURIComponent(token)}` : url;
@@ -896,15 +982,27 @@ async function doPushToDevice(accountId, deviceId, token) {
 
     showToast('正在推送到音响...');
 
+  // 从本地当前位置续播（seek 需宿主支持 serveFile.seekSeconds）
+  let pushUrl = lockedUrl;
+  if (lockedPos > 0) {
+    pushUrl += (pushUrl.includes('?') ? '&' : '?') + `seek=${lockedPos}`;
+  }
+
   try {
     const json = await miotPost('/mina/play-url', {
       account_id: accountId,
       device_id: deviceId,
-      url: lockedUrl,
+      url: pushUrl,
     }, token);
     if (json.success) {
       showToast('已推送到音响');
       enterMiotRemote(accountId, deviceId, token);
+      // 首次推送从本地断点续播，估算基线同步到断点位置
+      const mr = state.miotRemote;
+      if (mr) {
+        mr._estimate = lockedPos;
+        mr._estBase = Date.now();
+      }
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
     }

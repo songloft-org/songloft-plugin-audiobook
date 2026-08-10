@@ -167,8 +167,23 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
         }
       }
 
+      // ?seek=N：遥控推送音响时从第 N 秒起播（宿主 serveFile.seekSeconds 能力，SDK v2.13.2+）
+      const q = parseQuery(req.query || '');
+      const seekSeconds = Number(q.seek || 0);
+
       try {
         const playablePath = await ensurePlayablePath(chapter.fileRelPath);
+        if (seekSeconds > 0) {
+          // 已持久化的真实时长，用于宿主侧 ffmpeg 进程超时保护
+          const progress = bm.getProgress(params.id, params.chapterId);
+          return {
+            serveFile: {
+              filePath: playablePath,
+              seekSeconds,
+              durationSeconds: progress.duration > 0 ? progress.duration : undefined,
+            },
+          } as any;
+        }
         return { serveFile: { filePath: playablePath } } as any;
       } catch (err) {
         songloft.log.warn(`音频读取失败: ${chapter.fileRelPath} (${String(err)})`);
