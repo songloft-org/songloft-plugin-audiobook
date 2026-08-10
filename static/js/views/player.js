@@ -5,6 +5,9 @@ import { state, switchView, getChapterDuration } from '../state.js';
 
 // ==================== 音频核心 ====================
 
+// 已触发续播的章节 ID，防止 ended/pause/timeupdate 多路兜底重复续播
+let lastAdvancedChapterId = null;
+
 export function ensureAudio() {
   if (state.audioEl) return state.audioEl;
   const a = document.getElementById('audio');
@@ -36,6 +39,17 @@ export function ensureAudio() {
       el._preloadTriggered = true;
       preloadNextChapter();
     }
+
+    // 兜底：已播到片尾但 ended 事件未触发（部分 WebView 丢失事件）时延迟续播
+    const dur = isFinite(el.duration) ? el.duration : getChapterDuration(state.currentChapter);
+    if (dur > 0 && el.currentTime >= dur - 0.5 && !el._advanceTimer) {
+      el._advanceTimer = setTimeout(() => {
+        el._advanceTimer = null;
+        const d = isFinite(el.duration) ? el.duration : getChapterDuration(state.currentChapter);
+        // el.ended 优先：手动暂停在片尾（未播完）不续播；ended 状态丢失时按位置兜底
+        if (d > 0 && (el.ended || el.currentTime >= d - 0.5)) handleChapterEnd();
+      }, 600);
+    }
   });
 
   el.addEventListener('play', () => updatePlayState(true));
@@ -45,29 +59,10 @@ export function ensureAudio() {
     if (state.currentBookForPlayer && state.currentChapter && isFinite(el.currentTime)) {
       saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, el.currentTime, el.duration || 0);
     }
+    // 兜底：媒体已到达末尾（ended 事件可能丢失）时触发续播
+    if (el.ended) handleChapterEnd();
   });
-  el.addEventListener('ended', () => {
-    if (!state.currentBookForPlayer || !state.currentChapter) return;
-
-    saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, el.duration || 0, el.duration || 0, true);
-
-    if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
-      state.sleepTimer.chaptersRemaining--;
-      updateSleepTimerUI();
-      if (state.sleepTimer.chaptersRemaining <= 0) {
-        cancelSleepTimer();
-        el.pause();
-        showToast('定时关闭：已播放完设定集数');
-        return;
-      }
-    }
-
-    const chapters = state.currentBookForPlayer.chapters;
-    const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
-    if (idx >= 0 && idx < chapters.length - 1) {
-      playChapter(state.currentBookForPlayer, chapters[idx + 1], false);
-    }
-  });
+  el.addEventListener('ended', handleChapterEnd);
   el.addEventListener('loadedmetadata', () => {
     if (state.currentChapter && isFinite(el.duration)) {
       state.realDurations[state.currentChapter.id] = el.duration;
@@ -83,6 +78,39 @@ export function ensureAudio() {
     }
   });
   return el;
+}
+
+/** 章节播完统一处理：保存完成进度 → 定时关闭检查 → 自动续播下一集（多路触发共用，防重入） */
+function handleChapterEnd() {
+  const el = state.audioEl;
+  if (!el || !state.currentBookForPlayer || !state.currentChapter) return;
+  if (state.miotRemote) return; // 遥控模式下由轮询驱动续播，避免本地续播退出遥控
+  if (lastAdvancedChapterId === state.currentChapter.id) return; // 已续播过，防止重复触发
+  lastAdvancedChapterId = state.currentChapter.id;
+  if (el._advanceTimer) {
+    clearTimeout(el._advanceTimer);
+    el._advanceTimer = null;
+  }
+
+  saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, el.duration || 0, el.duration || 0, true);
+
+  if (state.sleepTimer && state.sleepTimer.mode === 'chapters') {
+    state.sleepTimer.chaptersRemaining--;
+    updateSleepTimerUI();
+    if (state.sleepTimer.chaptersRemaining <= 0) {
+      cancelSleepTimer();
+      el.pause();
+      lastAdvancedChapterId = null; // 允许下次播放结束时再次进入此分支
+      showToast('定时关闭：已播放完设定集数');
+      return;
+    }
+  }
+
+  const chapters = state.currentBookForPlayer.chapters;
+  const idx = chapters.findIndex((c) => c.id === state.currentChapter.id);
+  if (idx >= 0 && idx < chapters.length - 1) {
+    playChapter(state.currentBookForPlayer, chapters[idx + 1], false);
+  }
 }
 
 export async function playChapter(book, chapter, switchToPlayer) {
@@ -103,6 +131,11 @@ export async function playChapter(book, chapter, switchToPlayer) {
 
   const audio = ensureAudio();
   audio._preloadTriggered = false; // 新章节重置预加载标记
+  if (audio._advanceTimer) {
+    clearTimeout(audio._advanceTimer);
+    audio._advanceTimer = null;
+  }
+  lastAdvancedChapterId = null; // 新章节允许再次触发续播
   updatePlayState(true);
 
   let token = '';

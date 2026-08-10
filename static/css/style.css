@@ -1192,6 +1192,17 @@ input[type="range"]::-moz-range-thumb {
 .settings-about-label {
   color: var(--text-3);
 }
+.settings-thanks-names {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 4px;
+  line-height: 1.5;
+}
+.settings-thanks-desc {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
 .settings-project-link {
   display: block;
   padding: 10px 0;
