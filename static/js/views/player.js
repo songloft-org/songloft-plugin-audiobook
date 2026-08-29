@@ -535,7 +535,7 @@ function enterMiotRemote(accountId, deviceId, token) {
   // 模式切换，取消旧定时器
   cancelSleepTimer();
 
-  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true, _pushing: false, _estimate: 0, _estBase: null };
+  state.miotRemote = { accountId, deviceId, token, pollTimer: null, isPlaying: true, _pushing: false, _estimate: 0, _estBase: null, _graceUntil: 0, _sawPosition: false };
 
   // 暂停本地音频（优先执行，防止期间 ended 事件干扰）
   const audio = state.audioEl;
@@ -607,27 +607,45 @@ async function pollMiotStatus() {
     const isPlaying = d.is_playing ?? (d.state === 'playing');
 
     const totalDur = getChapterDuration(state.currentChapter);
-
-    // 本地估算播放位置：/mina/status 底层约 4s 缓存，播完瞬间的 position 窗口太短会漏判，
-    // 用播放状态 + 轮询时间差累加估算，仅用于"播完"判定
     const now = Date.now();
-    if (isPlaying && r._estBase && r._estimate !== undefined) {
-      const dt = (now - r._estBase) / 1000;
-      if (dt > 0 && dt < 15) r._estimate += dt; // 间隔异常（请求超时）不累加
-    }
-    r._estBase = now;
-    if (r._estimate === undefined) r._estimate = position > 0 ? position : 0;
-    // 播放中云端位置从接近末尾大幅回退 → 音箱循环重播当前曲目，视为播完
-    const replayed = totalDur > 0 && isPlaying && r._lastCloudPos !== undefined && position > 0
-      && r._lastCloudPos > totalDur * 0.6 && position < r._lastCloudPos - 30;
-    r._lastCloudPos = position;
-    // 云端位置与估算偏差过大时以云端校准（如音箱端拖动、外推刷新）；循环重播场景跳过校准
-    if (!replayed && position > 0 && Math.abs(position - r._estimate) > 20) {
-      r._estimate = position;
+
+    // 观察期：推送新曲后 /mina/status 仍会返回上一曲的陈旧位置（底层约 4s 缓存），
+    // 期间跳过估算/校准/播完判定，避免旧数据触发误判切下一章
+    const inGrace = !!r._graceUntil && now < r._graceUntil;
+
+    let replayed = false;
+    if (!inGrace) {
+      // 观察期外看到有效位置才算本章真正起播过（观察期内是上一曲的陈旧数据）
+      if (position > 0) r._sawPosition = true;
+      if (r._graceUntil) {
+        // 观察期刚结束：缓存已刷新，用当前云端位置重建估算基线
+        r._graceUntil = 0;
+        r._estimate = position > 0 ? position : 0;
+        r._estBase = now;
+        r._lastCloudPos = position > 0 ? position : undefined;
+      } else {
+        // 本地估算播放位置：/mina/status 底层约 4s 缓存，播完瞬间的 position 窗口太短会漏判，
+        // 用播放状态 + 轮询时间差累加估算，仅用于"播完"判定
+        if (isPlaying && r._estBase && r._estimate !== undefined) {
+          const dt = (now - r._estBase) / 1000;
+          if (dt > 0 && dt < 15) r._estimate += dt; // 间隔异常（请求超时）不累加
+        }
+        r._estBase = now;
+        if (r._estimate === undefined) r._estimate = position > 0 ? position : 0;
+        // 播放中云端位置从接近末尾大幅回退 → 音箱循环重播当前曲目，视为播完
+        replayed = totalDur > 0 && isPlaying && r._lastCloudPos !== undefined && position > 0
+          && r._lastCloudPos > totalDur * 0.6 && position < r._lastCloudPos - 30;
+        r._lastCloudPos = position;
+        // 云端位置与估算偏差过大时以云端校准（如音箱端拖动、外推刷新）；循环重播场景跳过校准
+        if (!replayed && position > 0 && Math.abs(position - r._estimate) > 20) {
+          r._estimate = position;
+        }
+      }
     }
 
-    // 如果 miot 返回了 0 位置（章节结束），用本地时长作为结束位置
-    if (totalDur > 0 && position === 0 && !isPlaying) {
+    // 如果 miot 返回了 0 位置（章节结束），用本地时长作为结束位置；
+    // 仅在本章确认起播过之后才换算，否则是"还没起播/播放失败"，不能当作播完
+    if (totalDur > 0 && position === 0 && !isPlaying && r._sawPosition) {
       position = totalDur;
     }
 
@@ -644,13 +662,13 @@ async function pollMiotStatus() {
     // 更新播放/暂停按钮 + 封面旋转
     updatePlayState(isPlaying);
 
-    // 保存进度到本地（时长用本地值）
-    if (state.currentBookForPlayer && state.currentChapter && totalDur > 0) {
+    // 保存进度到本地（时长用本地值）；观察期内是陈旧数据不保存
+    if (!inGrace && state.currentBookForPlayer && state.currentChapter && totalDur > 0) {
       saveProgress(state.currentBookForPlayer.id, state.currentChapter.id, position, totalDur);
     }
 
     // 播放完毕 → 自动推下一章（循环重播 / 估算位置 / 云端末尾值 三路兜底）
-    const ended = totalDur > 0 && (replayed || r._estimate >= totalDur - 2 || position >= totalDur - 2);
+    const ended = !inGrace && totalDur > 0 && (replayed || r._estimate >= totalDur - 2 || position >= totalDur - 2);
     if (ended) {
       // 防止重复推送（可能多个轮询周期都满足条件）
       if (r._pushing) return;
@@ -746,6 +764,9 @@ async function pushChapterUrlToMiot(book, chapter, seekSeconds) {
       r._estimate = seekSeconds && seekSeconds > 0 ? seekSeconds : 0;
       r._estBase = Date.now();
       r._lastCloudPos = undefined;
+      // 观察期：status 缓存仍返回上一曲数据，期间不做播完判定；重置起播标记
+      r._graceUntil = Date.now() + 8000;
+      r._sawPosition = false;
       showToast(`正在播放：${chapter.title}`);
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
@@ -1002,6 +1023,9 @@ async function doPushToDevice(accountId, deviceId, token) {
       if (mr) {
         mr._estimate = lockedPos;
         mr._estBase = Date.now();
+        // 观察期：音箱起播前 status 返回的是历史数据，期间不做播完判定
+        mr._graceUntil = Date.now() + 8000;
+        mr._sawPosition = false;
       }
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
