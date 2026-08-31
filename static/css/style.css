@@ -5,8 +5,8 @@
 
 :root {
   --bg: var(--md-surface);
-  --surface: var(--md-surface-1);
-  --surface-2: var(--md-surface-2);
+  --surface: var(--md-surface-container);
+  --surface-2: var(--md-surface-container-high);
   --primary: var(--md-primary);
   --on-primary: var(--md-on-primary);
   --primary-container: var(--md-primary-container);

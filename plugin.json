@@ -22,6 +22,6 @@
   ],
   "updateUrl": "https://raw.githubusercontent.com/mimusic-org/mimusic-jsplugin-releases/audiobook/plugin.json",
   "download_url": "https://github.com/mimusic-org/mimusic-jsplugin-releases/releases/download/audiobook-v1.1.1/audiobook.jsplugin.zip",
-  "entryHash": "",
-  "zipHash": ""
+  "entryHash": "2aedec173f965bc63c951fe56a1da6529de04318d5ccfdd73a6ac4beb827b5dd",
+  "zipHash": "b7c9771140e40ac345d69c134e07a10666f6b2593e3e4f62f6d1cad1c4661588"
 }
