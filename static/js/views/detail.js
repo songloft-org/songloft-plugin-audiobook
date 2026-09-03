@@ -44,7 +44,7 @@ export function renderBookDetail(book) {
         <div class="book-hero-desc">${escapeHtml(book.description || '')}</div>
         ${book.tags && book.tags.length ? `<div class="book-hero-tags">${book.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
         <div class="book-hero-actions">
-          <button class="btn btn-primary" id="btnPlayFirst">▶ 从第一集播放</button>
+          <button class="btn btn-primary" id="btnPlayFirst">▶ 播放</button>
           <button class="btn btn-ghost" id="btnToggleFav">${book.isFavorite ? '★ 已收藏' : '☆ 收藏'}</button>
           <button class="btn btn-ghost" id="btnRefreshBook">🔄 刷新</button>
         </div>
@@ -82,10 +82,25 @@ export function renderBookDetail(book) {
     renderBookDetail(book);
   });
 
-  document.getElementById('btnPlayFirst').addEventListener('click', () => {
-    if (state.currentBook && state.currentBook.chapters.length) {
-      playChapter(state.currentBook, state.currentBook.chapters[0], false);
+  const btnEl = document.getElementById('btnPlayFirst');
+  btnEl.addEventListener('click', () => {
+    if (!state.currentBook || !state.currentBook.chapters.length) return;
+    // 找最后播放的章节（有进度且不是刚开始的）
+    let hasHistory = false;
+    const sorted = [...book.chapters].sort((a, b) => {
+      const aTime = (a.progress?.updatedAt || 0);
+      const bTime = (b.progress?.updatedAt || 0);
+      return bTime - aTime;
+    });
+    for (const c of sorted) {
+      if (c.progress && c.progress.duration && c.progress.position > 10) {
+        hasHistory = true;
+        break;
+      }
     }
+    btnEl.textContent = hasHistory ? '▶ 继续播放' : '▶ 播放';
+    const ch = hasHistory ? sorted.find(c => c.progress && c.progress.duration && c.progress.position > 10) : book.chapters[0];
+    playChapter(state.currentBook, ch, false);
   });
   document.getElementById('btnToggleFav').addEventListener('click', async () => {
     try {
