@@ -266,6 +266,9 @@
       <div class="player-fab-ring"></div>
     </div>
 
+    <!-- 日志面板切换按钮（右下角） -->
+    <button id="btnLogPanel" class="log-toggle-btn" title="查看日志">📋</button>
+
     <!-- 编辑弹窗 -->
     <div id="editOverlay" class="edit-overlay" hidden>
       <div class="edit-modal">
@@ -327,6 +330,22 @@
             <button class="btn btn-ghost settings-clean-btn" id="btnCleanCache">🗑️ 清理缓存</button>
           </div>
           <div class="settings-section">
+            <div class="settings-section-title">Webhook（语音命令接收）</div>
+            <div class="settings-webhook-row">
+              <span class="settings-webhook-status" id="webhookStatus">加载中...</span>
+              <label class="switch">
+                <input type="checkbox" id="webhookToggle">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="settings-webhook-url-row">
+              <code class="settings-webhook-url" id="webhookUrl">/api/v1/jsplugin/audiobook/api/webhook/said</code>
+              <button class="btn btn-ghost btn-sm" id="btnCopyWebhook" title="复制完整地址">📋 复制</button>
+              <button class="btn btn-ghost btn-sm" id="btnResetToken" title="重新生成 Token">🔄 重置</button>
+            </div>
+            <div class="settings-webhook-help">将以上地址填写到小爱插件的 Webhook 回调设置中，即可通过语音控制有声书播放。</div>
+          </div>
+          <div class="settings-section">
             <div class="settings-section-title">关于</div>
             <div class="settings-about-info">
               <div class="settings-about-row"><span class="settings-about-label">版本</span><span id="settingsVersion">-</span></div>
@@ -354,6 +373,24 @@
 
     <!-- Toast -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <!-- 日志面板（调试用） -->
+    <div id="logPanel" class="log-panel">
+      <div class="log-panel-inner">
+        <div class="log-panel-header">
+          <span>📋 日志面板</span>
+          <button class="log-close-btn" id="btnCloseLogPanel">✕</button>
+        </div>
+        <div class="log-panel-body" id="logPanelBody">
+          <div class="log-empty">暂无日志</div>
+        </div>
+        <div class="log-panel-footer">
+          <span id="logCount">共 0 条</span>
+          <button class="log-tb-btn" id="btnClearLogs">清屏</button>
+          <button class="log-tb-btn" id="btnCopyLogs">复制</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="static/js/app.js"></script>

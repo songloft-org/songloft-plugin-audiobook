@@ -1,3 +1,27 @@
+// ================================================================
+// 日志系统（供前端日志面板展示）
+// ================================================================
+
+const MAX_LOGS = 200;
+const webhooks: Array<{ time: number; type: string; action: string; detail: string; result: string | null }> = [];
+
+/** 向内存日志追加一条记录（前端日志面板用） */
+function pushWebhookLog(type: string, action: string, detail: string, result: string | null): void {
+  webhooks.push({ time: Date.now(), type, action, detail, result });
+  if (webhooks.length > MAX_LOGS) webhooks.shift();
+}
+
+/** 将中文意图名映射到类型图标 */
+function intentToType(intent: string): string {
+  switch (intent) {
+    case 'PLAY_EPISODE': return 'voice';
+    case 'PLAY_BOOK': return 'voice';
+    case 'NEXT_EPISODE': return 'voice';
+    case 'PREV_EPISODE': return 'voice';
+    default: return 'speaker';
+  }
+}
+
 // HTTP 路由处理器：使用 SDK 的 createRouter()
 
 import { createRouter } from '@songloft/plugin-sdk';
@@ -5,8 +29,12 @@ import type { HTTPRequest } from '@songloft/plugin-sdk';
 import { parseQuery, jsonResponse, errorResponse, getImageMime } from '../utils/helpers';
 import { BookManager } from '../services/bookManager';
 import { ensurePlayablePath, needsTranscode, isCacheReady, getCacheInfo, clearCache, probeDuration } from '../services/transcoder';
+import { parseIntent } from '../services/intentParser';
 
 type AppRouter = ReturnType<typeof createRouter>;
+
+/** 最后选中的设备（用于 webhook 自动定位） */
+let lastSelectedDeviceId: { device_id: string } | null = null;
 
 /** 将相对封面路径解析为 data URI */
 async function resolveCoverUrl(relPath: string | null): Promise<string | null> {
@@ -316,4 +344,464 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     const result = await clearCache();
     return jsonResponse({ success: true, data: result });
   });
+
+  // ================================================================
+  // Webhook 语音命令接收（来自 miot-plus）
+  // ================================================================
+
+  // POST /api/webhook/said —— 接收外部推送的用户口令文本，解析并执行有声书意图
+  router.post('/api/webhook/said', async (req: HTTPRequest) => {
+    try {
+      // Webhook 开关检查
+      if (!bm.isWebhookEnabled()) {
+        return jsonResponse({ success: false, error: 'Webhook 未启用' }, 503);
+      }
+
+      // Token 认证（query param ?token=xxx 或 header X-Webhook-Token）
+      const q = parseQuery(req.query || '');
+      const queryToken = (q.token as string) || '';
+      const headerToken = (req.headers as Record<string, string>)?.['X-Webhook-Token'] || '';
+      const token = queryToken || headerToken;
+      if (!bm.verifyWebhookToken(token)) {
+        pushWebhookLog('error', '认证失败', `无效或缺失 token`, '❌');
+        return jsonResponse({ success: false, error: '认证失败' }, 401);
+      }
+
+      let bodyObj: Record<string, unknown> = {};
+      try {
+        const raw = typeof req.body === 'string' ? req.body : '';
+        if (raw) bodyObj = JSON.parse(raw);
+      } catch { /* ignore */ }
+
+      // 提取用户说的话：可能是直接传 message，也可能是从 miot-plus webhook payload 中提取 question
+      const directMsg = bodyObj.message as string | undefined;
+      const messages = bodyObj.messages as Array<Record<string, unknown>> | undefined;
+      const query = extractQuestion(messages ?? [], directMsg);
+
+      if (!query || !query.trim()) {
+        pushWebhookLog('speaker', '空消息', `忽略空请求`, null);
+        return jsonResponse({ success: true, data: { executed: false, reason: 'empty_message' } });
+      }
+
+      // 解析意图
+      const intent = parseIntent(query.trim());
+      if (!intent) {
+        // 不是有声书相关的口令，返回成功但不执行（让 miot-plus 自己处理）
+        songloft.log.info(`[webhook] non-matching intent: "${query}"`);
+        pushWebhookLog('speaker', '意图未匹配', `query="${query}"`, null);
+        return jsonResponse({ success: true, data: { executed: false, reason: 'no_match' } });
+      }
+
+      songloft.log.info(`[webhook] matched intent: ${intent.intent} book="${intent.bookTitle}" chapter=${intent.chapterIndex}`);
+      pushWebhookLog('voice', '意图匹配', `${intent.intent} book="${intent.bookTitle}" chapter=${intent.chapterIndex}`, null);
+
+      // 解析目标设备（从 webhook payload 中取，或查找最近活跃设备）
+      const target = await resolveDeviceTarget(bodyObj);
+      if (!target) {
+        pushWebhookLog('error', '设备查找', '没有找到可用的目标音箱设备', '❌');
+        return jsonResponse({ success: false, error: '没有找到可用的目标音箱设备' });
+      }
+
+      // 执行操作
+      const ok = await executeAudiobookAction(bm, intent, target.accountId, target.deviceId);
+      if (!ok) {
+        pushWebhookLog('error', '执行失败', `${intent.intent} book="${intent.bookTitle}"`, '❌');
+        return jsonResponse({ success: false, error: '执行失败' });
+      }
+
+      pushWebhookLog('voice', intent.intent === 'PLAY_EPISODE' ? '播放章节' : (intent.intent === 'PLAY_BOOK' ? '播放书籍' : (intent.intent === 'NEXT_EPISODE' ? '下一集' : '上一集')), `book="${intent.bookTitle}"`, '✅');
+      return jsonResponse({ success: true, data: { executed: true, intent: intent.intent, bookTitle: intent.bookTitle } });
+    } catch (e: any) {
+      songloft.log.error(`[webhook] error: ${String(e)}`);
+      pushWebhookLog('error', '处理异常', e.message || String(e), '❌');
+      return jsonResponse({ success: false, error: e.message || String(e) });
+    }
+  });
+
+  // GET /api/webhook/config —— 获取 Webhook 配置信息（含 URL）
+  router.get('/api/webhook/config', async () => {
+    const enabled = bm.isWebhookEnabled();
+    const path = generateWebhookUrl();
+    const token = bm.getWebhookToken();
+    return jsonResponse({
+      success: true,
+      data: { enabled, url: path, token },
+    });
+  });
+
+  // POST /api/webhook/toggle —— 切换 Webhook 开关
+  router.post('/api/webhook/toggle', async (req: HTTPRequest) => {
+    try {
+      let bodyObj: Record<string, boolean> = {};
+      try {
+        const raw = typeof req.body === 'string' ? req.body : '';
+        if (raw) bodyObj = JSON.parse(raw);
+      } catch { /* ignore */ }
+      const enabled = !!bodyObj.enabled;
+      await bm.setWebhookEnabled(enabled);
+      return jsonResponse({ success: true, data: { enabled } });
+    } catch (e: any) {
+      return jsonResponse({ success: false, error: e.message || String(e) });
+    }
+  });
+
+  // POST /api/webhook/regenerate-token —— 重新生成 webhook token
+  router.post('/api/webhook/regenerate-token', async () => {
+    try {
+      const newToken = await bm.regenerateWebhookToken();
+      songloft.log.info('[webhook] token regenerated');
+      pushWebhookLog('config', 'token 已更新', null, null);
+      return jsonResponse({ success: true, data: { token: newToken } });
+    } catch (e: any) {
+      return jsonResponse({ success: false, error: e.message || String(e) });
+    }
+  });
+
+  // GET /api/logs —— 获取日志（供前端日志面板展示）
+  router.get('/api/logs', async () => {
+    return jsonResponse({ success: true, data: webhooks });
+  });
+}
+
+// ================================================================
+// 辅助函数：Webhook 执行逻辑
+// ================================================================
+
+/** MIoT API 基础路径（用于 push） */
+const MIOT_API_BASE = '/api/v1/jsplugin/miot';
+
+/** 导出给前端调用的日志查询函数（通过 HTTP 路由调用，非直接导出） */
+export function getWebhookLogs(): Array<{ time: number; type: string; action: string; detail: string; result: string | null }> {
+  return [...webhooks];
+}
+
+/** 从 webhook payload 中提取用户说的话 */
+function extractQuestion(messages: Array<Record<string, unknown>>, directMsg?: string): string | null {
+  // 优先直接消息（前端手动提交）
+  if (directMsg && typeof directMsg === 'string') return directMsg.trim();
+
+  if (!Array.isArray(messages) || messages.length === 0) return null;
+
+  // miot-plus webhook payload 格式：
+  // { account_id, device_id, device_name, messages: [ { account_id, device_id, device_name, message: AskMessage } ] }
+  // AskMessage 结构：{ timestamp_ms, response: { answer: [ { question, content, intention?: { query } } ] } }
+  for (const msg of messages) {
+    // 扁平结构
+    const q1 = msg.question as string | undefined;
+    if (q1) return q1.trim();
+
+    // intention.query
+    const intent = msg.intention as Record<string, unknown>;
+    const iq = intent?.query as string | undefined;
+    if (iq) return iq.trim();
+
+    // 嵌套在 message 字段中的 AskMessage
+    const innerMsg = msg.message as Record<string, unknown> | undefined;
+    if ((innerMsg?.response as Record<string, unknown>)?.answer) {
+      const answerList = (innerMsg.response as Record<string, unknown>).answer as Array<Record<string, unknown>>;
+      if (answerList.length > 0) {
+        const ans = answerList[0];
+        const q2 = ans.question as string | undefined;
+        if (q2) return q2.trim();
+        // intention.query 在答案内
+        const ansIntent = ans.intention as Record<string, unknown>;
+        const iq2 = ansIntent?.query as string | undefined;
+        if (iq2) return iq2.trim();
+      }
+    }
+  }
+
+  return null;
+}
+
+/** 生成 Webhook URL */
+function generateWebhookUrl(): string {
+  return '/app/audiobook/api/webhook/said';
+}
+
+/** 获取插件认证 Token */
+async function getAuthToken(): Promise<string> {
+  try {
+    return await songloft.plugin.getToken();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 通过 HTTP POST 调用 miot-plus 的 /mina/play-url
+ * 完全复用电竞书插件遥控模式验证过的调用方式（lxbridge/src/bridge/miot.ts 同款）
+ */
+async function pushChapterToMiot(
+  bm: BookManager,
+  accountId: string,
+  deviceId: string,
+  book: ReturnType<BookManager['getBookById']>,
+  chapter: import('../types').Chapter,
+  seekSeconds: number,
+): Promise<boolean> {
+  let audioPath: string;
+  try {
+    // 构建音频路径（内部路由）
+    audioPath = seekSeconds > 0
+      ? `/api/books/${book.id}/chapters/${chapter.id}/audio?seek=${seekSeconds}`
+      : `/api/books/${book.id}/chapters/${chapter.id}/audio`;
+
+    songloft.log.info(`[webhook] 🔊 pushChapterToMiot start book="${book.title}" ch="${chapter.title}" seek=${seekSeconds} aid=${accountId} did=${deviceId}`);
+
+    // 确保文件可播放（可能触发转码）
+    const playablePath = await ensurePlayablePath(chapter.fileRelPath);
+    songloft.log.info(`[webhook] ▶ file ready: ${playablePath}`);
+
+    // 构造请求体
+    const body = JSON.stringify({
+      account_id: accountId,
+      device_id: deviceId,
+      url: audioPath,
+    });
+
+    // 获取认证 token
+    const token = await getAuthToken();
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // 构建完整 URL（与 lxbridge 一致）
+    const fullUrl = `${MIOT_API_BASE}/mina/play-url`;
+    songloft.log.info(`[webhook] 📡 POST ${fullUrl}`);
+
+    const resp = await fetch(fullUrl, {
+      method: 'POST',
+      headers,
+      body,
+    });
+
+    songloft.log.info(`[webhook] 📨 status=${resp.status}`);
+    const text = await resp.text();
+    songloft.log.info(`[webhook] 📦 response(${text.length}): ${text.substring(0, 200)}`);
+
+    let ok = false;
+    if (resp.ok) {
+      try {
+        const json = JSON.parse(text);
+        ok = !!json.success;
+      } catch {
+        ok = text.includes('success');
+      }
+    }
+
+    songloft.log.info(`[webhook] ✅ pushed to miot: ${ok ? 'OK' : 'FAILED'} book="${book.title}" ch="${chapter.title}"`);
+
+    if (ok) {
+      bm.setProgress(book.id, chapter.id, seekSeconds, chapter.duration).catch(() => {});
+    }
+
+    return ok;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    songloft.log.error(`[webhook] ❌ push failed: book="${book?.title || '?'}" ch="${chapter?.title || '?'}" err=${msg}`);
+    return false;
+  }
+}
+
+/** 解析目标设备：从 payload 取或搜索最近活跃设备 */
+async function resolveDeviceTarget(body: Record<string, unknown>): Promise<{ accountId: string; deviceId: string } | null> {
+  const accountId = body.account_id as string | undefined;
+  const deviceId = body.device_id as string | undefined;
+  if (accountId && deviceId) {
+    songloft.log.info(`[webhook] 🎯 target from payload: aid=${accountId} did=${deviceId}`);
+    return { accountId, deviceId };
+  }
+
+  // 从 miot-plus 获取最近使用的设备
+  try {
+    songloft.log.info(`[webhook] 🔍 no device in payload, fetching from miot...`);
+    const token = await getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const resp = await fetch(`${MIOT_API_BASE}/mina/devices`, { headers });
+    if (!resp.ok) {
+      songloft.log.warn(`[webhook] ⚠️ failed to get devices: ${resp.status}`);
+      return null;
+    }
+
+    const data = await resp.json();
+    if (!data?.data || !Array.isArray(data.data)) {
+      songloft.log.warn(`[webhook] ⚠️ invalid device list format`);
+      return null;
+    }
+
+    // 查找第一个有 managed 设备的账号下最近使用的设备
+    const allDevices: Array<{ account_id: string; device_id: string }> = [];
+    for (const acc of data.data) {
+      const accId = acc.account_id || acc.accountId || '';
+      for (const d of (acc.devices || [])) {
+        if (d.managed) {
+          allDevices.push({
+            account_id: accId,
+            device_id: d.deviceID || d.device_id || d.deviceId || '',
+          });
+        }
+      }
+    }
+
+    if (allDevices.length === 0) {
+      songloft.log.warn(`[webhook] ⚠️ no managed devices found`);
+      return null;
+    }
+
+    // 按 last_selected_device_id 排序，取第一个
+    const sorted = allDevices.sort((a, b) => {
+      // 优先找 last_selected_device_id 匹配
+      const aMatch = lastSelectedDeviceId?.device_id === a.device_id ? 1 : 0;
+      const bMatch = lastSelectedDeviceId?.device_id === b.device_id ? 1 : 0;
+      return bMatch - aMatch;
+    });
+
+    const target = sorted[0];
+    songloft.log.info(`[webhook] 🎯 target from miot: aid=${target.account_id} did=${target.device_id}`);
+    return { accountId: target.account_id, deviceId: target.device_id };
+  } catch (e: any) {
+    songloft.log.error(`[webhook] ❌ device lookup failed: ${e.message}`);
+    return null;
+  }
+}
+
+/** 执行有声书操作 */
+async function executeAudiobookAction(
+  bm: BookManager,
+  intent: import('../services/intentParser').ParseResult,
+  accountId: string,
+  deviceId: string,
+): Promise<boolean> {
+  switch (intent.intent) {
+    case 'PLAY_EPISODE': {
+      // 精确指定章节：按书名 + 章节号匹配
+      const bookTitle = intent.bookTitle;
+      if (!bookTitle) return false;
+      const book = findBookByTitle(bm, bookTitle);
+      if (!book) return false;
+
+      const chapterIndex = intent.chapterIndex!; // 1-based
+      const chapters = bm.getBookById(book.id)?.chapters ?? [];
+      const clampedIndex = Math.max(1, Math.min(chapterIndex, chapters.length));
+      const chapter = chapters.find(c => c.index === clampedIndex);
+      if (!chapter) return false;
+
+      songloft.log.info(`[webhook] 🎵 PLAY_EPISODE "${book.title}" #${chapter.index} "${chapter.title}"`);
+      return await pushChapterToMiot(bm, accountId, deviceId, book, chapter, 0);
+    }
+
+    case 'PLAY_BOOK': {
+      // 播放书籍：从上次断点继续
+      const bookTitle = intent.bookTitle;
+      if (!bookTitle) return false;
+      const book = findBookByTitle(bm, bookTitle);
+      if (!book) return false;
+
+      // 获取上次播放进度
+      const recent = bm.getRecentlyPlayed();
+      const lastRecent = recent.find(r => r.bookId === book.id);
+      let seek = 0;
+
+      if (lastRecent) {
+        const progress = bm.getProgress(book.id, lastRecent.chapterId);
+        seek = progress.position > 10 ? progress.position : 0; // 跳过已完成章节
+        songloft.log.info(`[webhook] 📖 PLAY_BOOK "${book.title}" resume at ${seek}s from ch=${lastRecent.chapterId}`);
+      } else {
+        const detail = bm.getBookById(book.id);
+        songloft.log.info(`[webhook] 📖 PLAY_BOOK "${book.title}" first time, ${detail?.chapters?.length || 0} chapters`);
+        seek = 0;
+      }
+
+      // 从断点位置继续（或从头开始）
+      if (lastRecent) {
+        const targetChapter = bm.getChapter(book.id, lastRecent.chapterId);
+        if (!targetChapter) return false;
+        return await pushChapterToMiot(bm, accountId, deviceId, book, targetChapter, seek);
+      } else {
+        // 无历史，推第一章节
+        const detail = bm.getBookById(book.id);
+        const firstCh = detail?.chapters?.[0];
+        if (!firstCh) return false;
+        return await pushChapterToMiot(bm, accountId, deviceId, book, firstCh, 0);
+      }
+    }
+
+    case 'NEXT_EPISODE': {
+      // 下一集：从最近播放继续推下一章节
+      const recent = bm.getRecentlyPlayed();
+      const lastRecent = recent[0];
+      if (!lastRecent) {
+        songloft.log.info(`[webhook] NEXT_EPISODE: no recently played`);
+        return false;
+      }
+
+      const detail = bm.getBookById(lastRecent.bookId);
+      if (!detail) return false;
+
+      const currentChapter = detail.chapters.find(c => c.id === lastRecent.chapterId);
+      if (!currentChapter) return false;
+
+      const nextChapter = detail.chapters.find(c => c.index === currentChapter.index + 1);
+      if (!nextChapter) {
+        songloft.log.info(`[webhook] NEXT_EPISODE: already at end`);
+        return false;
+      }
+
+      songloft.log.info(`[webhook] ➡️ NEXT_EPISODE "${detail.title}" #${currentChapter.index} → #${nextChapter.index}`);
+      return await pushChapterToMiot(bm, accountId, deviceId, detail, nextChapter, 0);
+    }
+
+    case 'PREV_EPISODE': {
+      // 上一集：回退到前一章节开头
+      const recent = bm.getRecentlyPlayed();
+      const lastRecent = recent[0];
+      if (!lastRecent) {
+        songloft.log.info(`[webhook] PREV_EPISODE: no recently played`);
+        return false;
+      }
+
+      const detail = bm.getBookById(lastRecent.bookId);
+      if (!detail) return false;
+
+      const currentChapter = detail.chapters.find(c => c.id === lastRecent.chapterId);
+      if (!currentChapter) return false;
+
+      const prevChapter = detail.chapters.find(c => c.index === currentChapter.index - 1);
+      if (!prevChapter) {
+        songloft.log.info(`[webhook] PREV_EPISODE: already at start`);
+        return false;
+      }
+
+      songloft.log.info(`[webhook] ⬅️ PREV_EPISODE "${detail.title}" #${currentChapter.index} → #${prevChapter.index}`);
+      return await pushChapterToMiot(bm, accountId, deviceId, detail, prevChapter, 0);
+    }
+
+    default:
+      return false;
+  }
+}
+
+/** 在 BookManager 缓存中通过标题子串匹配查找书籍 */
+function findBookByTitle(bm: BookManager, title: string): ReturnType<BookManager['getBookById']> | null {
+  const books = bm.list({ pageSize: 100 }).books;
+  const lower = title.toLowerCase();
+
+  // 精确匹配优先
+  const exact = books.find(b => b.title.toLowerCase() === lower);
+  if (exact) return bm.getBookById(exact.id);
+
+  // 子串匹配（最长）
+  let bestMatch: ReturnType<BookManager['getBookById']> | null = null;
+  let bestLen = 0;
+  for (const b of books) {
+    if (b.title.toLowerCase().includes(lower)) {
+      if (b.title.length > bestLen) {
+        bestMatch = bm.getBookById(b.id);
+        bestLen = b.title.length;
+      }
+    }
+  }
+  return bestMatch;
 }

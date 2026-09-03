@@ -2,9 +2,112 @@
 import { state, switchView } from './state.js';
 import { ensureAudio, updatePlayerInfo, updatePlayerUI, togglePlaylistModal, togglePlaylistSort, playerPrevChapter, playerNextChapter, playerSeek, playerTogglePlay, cycleSpeed, openSleepTimer, closeSleepTimer, startSleepTimer, cancelSleepTimer, openCustomPicker, closeCustomPicker, pushToMiot, closeDevicePicker, exitMiotRemote } from './views/player.js';
 import { loadSnapshot, loadBooks, loadRecentlyPlayed, triggerRescan } from './views/home.js';
-import { openSettings, closeSettings, cleanCache } from './views/settings.js';
+import { openSettings, closeSettings, cleanCache, toggleWebhook, copyWebhookUrl, copyWebhookToken, resetWebhookToken } from './views/settings.js';
+import { escapeHtml, showToast } from './utils.js';
 
-// ==================== 绑定事件 ====================
+// ============================================================
+// 日志面板（调试用）
+// ============================================================
+
+let logEntries = [];
+let _logPollTimer = null;
+
+function toggleLogPanel() {
+  const panel = document.getElementById('logPanel');
+  if (!panel) return;
+  const isOpen = panel.classList.contains('open');
+  if (!isOpen) {
+    panel.classList.add('open');
+    fetchLogs();
+    // 每 5s 轮询刷新
+    _logPollTimer = setInterval(fetchLogs, 5000);
+  } else {
+    panel.classList.remove('open');
+    if (_logPollTimer) { clearInterval(_logPollTimer); _logPollTimer = null; }
+  }
+}
+
+async function fetchLogs() {
+  try {
+    const res = await fetch('./api/logs');
+    if (!res.ok) return;
+    const json = await res.json();
+    if (json?.success && Array.isArray(json.data)) {
+      // 新增条目才追加，避免重复渲染
+      const data = json.data;
+      const newLen = data.length - logEntries.length;
+      let startIdx = 0;
+      if (newLen > 0) startIdx = data.length - newLen;
+      for (let i = startIdx; i < data.length; i++) {
+        logEntries.push(data[i]);
+      }
+      renderLogs();
+    }
+  } catch { /* ignore */ }
+}
+
+function renderLogs() {
+  const body = document.getElementById('logPanelBody');
+  const countEl = document.getElementById('logCount');
+  if (!body || !countEl) return;
+
+  if (logEntries.length === 0) {
+    body.innerHTML = '<div class="log-empty">暂无日志</div>';
+    countEl.textContent = '共 0 条';
+    return;
+  }
+
+  let html = '';
+  for (let i = 0; i < logEntries.length; i++) {
+    const e = logEntries[i];
+    const d = new Date(e.time);
+    const ts = d.getHours().toString().padStart(2, '0') + ':' +
+               d.getMinutes().toString().padStart(2, '0') + ':' +
+               d.getSeconds().toString().padStart(2, '0');
+    const iconMap = { voice: '🎤', error: '❌', speaker: '📌', sys: 'ℹ️' };
+    const icon = iconMap[e.type] || '📌';
+    const rCls = e.result === '✅' ? 'le-ok' : (e.result === '❌' ? 'le-fail' : '');
+    const rText = e.result || '';
+
+    html += '<div class="log-entry type-' + (e.type || 'speaker') + '">' +
+            '<span class="le-time">' + ts + '</span>' +
+            '<span class="le-icon">' + icon + '</span>' +
+            escapeHtml(String(e.action || '')) + ' ' +
+            escapeHtml(String(e.detail || '')) +
+            '<span class="le-result ' + rCls + '">' + rText + '</span>' +
+            '</div>';
+  }
+  body.innerHTML = html;
+  // 滚动到底部（仅最后一条变化时自动滚）
+  const prevScroll = body.scrollHeight - body.scrollTop;
+  body.scrollTop = body.scrollHeight;
+
+  countEl.textContent = '共 ' + logEntries.length + ' 条';
+}
+
+function clearLogs() {
+  logEntries = [];
+  renderLogs();
+}
+
+function copyLogs() {
+  if (logEntries.length === 0) return;
+  const text = logEntries.map(function(e) {
+    const d = new Date(e.time);
+    const ts = d.toTimeString().slice(0, 8);
+    return '[' + ts + '] ' + (e.action || '') + ' ' + (e.detail || '');
+  }).join('\n');
+
+  navigator.clipboard.writeText(text).then(function() {
+    showToast('日志已复制到剪贴板');
+  }).catch(function() {
+    showToast('复制失败');
+  });
+}
+
+// ============================================================
+// 绑定事件
+// ============================================================
 
 function bindEvents() {
   // Search
@@ -142,6 +245,18 @@ function bindEvents() {
     if (e.target === e.currentTarget) closeSettings();
   });
   document.getElementById('btnCleanCache').addEventListener('click', cleanCache);
+  document.getElementById('webhookToggle').addEventListener('change', toggleWebhook);
+  document.getElementById('btnCopyWebhook').addEventListener('click', copyWebhookUrl);
+  const btnToken = document.getElementById('btnCopyToken');
+  if (btnToken) btnToken.addEventListener('click', copyWebhookToken);
+  const btnReset = document.getElementById('btnResetToken');
+  if (btnReset) btnReset.addEventListener('click', resetWebhookToken);
+
+  // 日志面板
+  document.getElementById('btnLogPanel').addEventListener('click', toggleLogPanel);
+  document.getElementById('btnCloseLogPanel').addEventListener('click', toggleLogPanel);
+  document.getElementById('btnClearLogs').addEventListener('click', clearLogs);
+  document.getElementById('btnCopyLogs').addEventListener('click', copyLogs);
 }
 
 // ==================== 启动 ====================

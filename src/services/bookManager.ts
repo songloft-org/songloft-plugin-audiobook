@@ -296,6 +296,47 @@ export class BookManager {
     return { ...this.settings };
   }
 
+  // ---------- Webhook 设置 ----------
+
+  isWebhookEnabled(): boolean {
+    return !!this.settings.webhookEnabled;
+  }
+
+  async setWebhookEnabled(enabled: boolean): Promise<void> {
+    this.settings.webhookEnabled = enabled;
+    await this.saveSettings();
+  }
+
+  /** 获取或生成 webhook 认证 token */
+  getWebhookToken(): string {
+    if (!this.settings.webhookToken) {
+      this.settings.webhookToken = this.generateToken();
+    }
+    return this.settings.webhookToken;
+  }
+
+  /** 验证 webhook token */
+  verifyWebhookToken(token: string): boolean {
+    const expected = this.getWebhookToken();
+    return expected && token === expected;
+  }
+
+  /** 重新生成 webhook token */
+  async regenerateWebhookToken(): Promise<string> {
+    this.settings.webhookToken = this.generateToken();
+    await this.saveSettings();
+    return this.settings.webhookToken;
+  }
+
+  private generateToken(): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
   // ---------- 元数据编辑 ----------
 
   async updateMetadata(bookId: string, data: BookMetadata): Promise<void> {

@@ -56,4 +56,8 @@ export interface BookMetadata {
 export interface PluginSettings {
   favorites: string[];
   recentlyPlayed: { bookId: string; chapterId: string; at: number }[];
+  /** Webhook 回调接收开关（来自 miot-plus 语音命令） */
+  webhookEnabled?: boolean;
+  /** Webhook 认证 token（自动生成的随机字符串） */
+  webhookToken?: string;
 }

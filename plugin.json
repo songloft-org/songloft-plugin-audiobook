@@ -13,6 +13,9 @@
   "externalPaths": [
     "/app/audiobook"
   ],
+  "publicPaths": [
+    "/api/webhook"
+  ],
   "permissions": [
     "storage",
     "fs",
