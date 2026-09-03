@@ -14,7 +14,7 @@
     "/app/audiobook"
   ],
   "publicPaths": [
-    "/api/webhook"
+    "/api/webhook/said"
   ],
   "permissions": [
     "storage",

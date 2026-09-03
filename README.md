@@ -56,10 +56,10 @@ npm run validate
 
 | 意图 | 关键词示例 | 行为 |
 |------|-----------|------|
-| **播放有声书** | `播放有声书三国演义`、`听三国`、`放红楼梦` | 按书名搜索本地书籍，从上次断点续播；无历史记录则从第一集开始 |
-| **指定章节** | `播放有声书三国演义第三十回`、`听三国第5章`、`放西游记第12节` | 精确匹配到指定章节并播放 |
-| **下一集** | `下一集`、`下一章`、`下一段`、`换一节`、`继续播放`、`继续`、`接着来` | 推送当前书籍的下一章节到音箱 |
-| **上一集** | `上一集`、`上一章`、`上一段`、`退一节`、`倒回去`、`回上一集` | 回退到当前书籍的前一章开头播放 |
+| **播放有声书**（续听） | `播放有声书三国演义`、`有声书三国`、`放三国` | 按书名搜索本地书籍，从上次断点续播；无历史记录则从第一集开始 |
+| **指定章节播放** | `播放有声书三国演义第三十回`、`有声书三国第5章`、`有声书红楼梦第12节` | 精确匹配到指定章节并播放 |
+| **下一集** | `下一集`、`下一章`、`下一段`、`下一回`、`换一节` | 推送当前书籍的下一章节到音箱 |
+| **上一集** | `上一集`、`上一章`、`上一段`、`上一回`、`回上一集`、`回上一章` | 回退到当前书籍的前一章开头播放 |
 
 ### 章节号解析
 
@@ -67,25 +67,71 @@ npm run validate
 - 支持中文数字：`第二十八回` / `第一章` / `第十二节`
 - 章节标识词统一为：`集` / `章` / `节` / `回`
 
-### 工作原理
+### 完整链路时序
 
-```
-用户对小爱说 "播放有声书三国演义第10集"
-  ↓
-小爱云端 NLP 识别 → 对话记录写入平台
-  ↓
-miot-plus 定时轮询发现新消息 → POST 到 Webhook URL
-  ↓
-audiobook 解析意图：book="三国演义", episode=10
-  ↓
-查找本地书籍 + 定位第10章音频文件
-  ↓
-POST /api/v1/jsplugin/miot/mina/play-url 推送到音箱
-  ↓
-音箱播放有声书章节
+以下以口令 **`播放有声书 三国演义第一回`** 为例：
+
+```mermaid
+sequenceDiagram
+    participant U as 用户/音箱
+    participant M as miot插件
+    participant S as Songloft 宿主
+    participant A as audiobook 插件
+    participant I as intentParser
+    participant B as BookManager
+    participant T as Transcoder
+    participant Mi as miot插件 API
+
+    U->>M: 语音 "播放有声书 三国演义第一回"
+    M->>S: POST /api/v1/jsplugin/audiobook/api/webhook/said
+    Note over S,A: Body: { message: "播放有声书 三国演义第一回", account_id, device_id }
+
+    S->>A: HTTP handler: /api/webhook/said
+    activate A
+    A->>A: verifyWebhookToken(token) — 认证
+    A->>I: parseIntent("播放有声书 三国演义第一回")
+    activate I
+    I->>I: 匹配关键词 → kw="播放有声书"
+    I->>I: argument="三国演义第一回"
+    I->>I: chapterIndex = chineseToNumber("一") = 1
+    I->>I: bookTitle = extractBookTitle → "三国演义"
+    I-->>A: { intent:'PLAY_EPISODE', bookTitle:'三国演义', chapterIndex:1 }
+    deactivate I
+
+    A->>A: resolveDeviceTarget(bodyObj)
+    alt payload 含 account_id + device_id
+        A->>A: 直接使用
+    else 无设备信息
+        A->>Mi: GET /mina/devices
+        Mi-->>A: 最近活跃设备列表
+        A->>A: 按 last_selected_device_id 排序取首项
+    end
+
+    A->>B: findBookByTitle("三国演义")
+    B->>B: list({pageSize:100}) → 标题子串匹配
+    B-->>A: Book{id, chapters:[...]}
+
+    A->>T: ensurePlayablePath(fileRelPath)
+    activate T
+    alt 文件为 WMA 或其他需转码格式
+        T->>T: ffmpeg → MP3 转码并缓存
+    end
+    T-->>A: playablePath
+
+    A->>Mi: POST /mina/play-url
+    Note over A,Mi: Body: { account_id, device_id, url: "/api/books/{id}/chapters/{chapterId}/audio?seek=0" }
+    Mi-->>A: { success: true }
+
+    A->>B: setProgress(bookId, chapterId, position=0, duration)
+    A-->>S: { success:true, data:{ executed:true, intent:'PLAY_EPISODE', bookTitle:'三国演义' }}
+    deactivate A
+
+    S-->>U: 音箱开始播放「三国演义」第1章
 ```
 
-> **注意**：暂停、停止、切歌、音量、睡眠定时器等通用控制口令由 miot-plus 内置处理，有声书插件不重复覆盖。
+> **核心规则**：`PLAY_BOOK_KEYWORDS` 决定入口，是否提取到章节号决定意图类型（有章节号 → `PLAY_EPISODE`，否则 → `PLAY_BOOK`）；前后章节操作（`NEXT_EPISODE_KEYWORDS` / `PREV_EPISODE_KEYWORDS`）独立于播放类判断，优先级更高。
+
+> **注意**：暂停、停止、切歌、音量、睡眠定时器等通用控制口令由 miot插件 内置处理，有声书插件不重复覆盖。
 
 ### API 端点
 

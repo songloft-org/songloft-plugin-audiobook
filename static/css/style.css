@@ -1323,6 +1323,40 @@ input[type="range"]::-moz-range-thumb {
   line-height: 1.6;
 }
 
+.webhook-commands-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.webhook-commands-table th {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-2);
+  font-weight: 500;
+}
+.webhook-commands-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--md-outline-variant);
+  color: var(--text-2);
+}
+.webhook-commands-table code {
+  font-family: inherit;
+  background: var(--md-surface-container-high);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.webhook-commands-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.6;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--md-outline-variant);
+}
+
 /* ========== 日志面板 ========== */
 
 .log-toggle-btn {

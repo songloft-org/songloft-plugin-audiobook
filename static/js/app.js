@@ -29,7 +29,14 @@ function toggleLogPanel() {
 
 async function fetchLogs() {
   try {
-    const res = await fetch('./api/logs');
+    const init = {};
+    try {
+      const authData = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+      if (authData.accessToken) {
+        init.headers = { 'Authorization': 'Bearer ' + authData.accessToken };
+      }
+    } catch (e) {}
+    const res = await fetch('./api/logs', init);
     if (!res.ok) return;
     const json = await res.json();
     if (json?.success && Array.isArray(json.data)) {
@@ -86,6 +93,13 @@ function renderLogs() {
 }
 
 function clearLogs() {
+  const authData = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+  const opts = { method: 'POST' };
+  if (authData.accessToken) {
+    opts.headers = { 'Authorization': 'Bearer ' + authData.accessToken };
+  }
+  fetch('./api/logs', opts).catch(() => {});
+
   logEntries = [];
   renderLogs();
 }

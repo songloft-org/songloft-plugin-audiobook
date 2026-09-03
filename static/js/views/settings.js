@@ -49,7 +49,16 @@ async function loadWebhookConfig() {
     _webhookToken = data.token || '';
     toggleEl.checked = _webhookEnabled;
     statusEl.textContent = _webhookEnabled ? '已启用' : '已关闭';
-    urlEl.textContent = getFullWebhookUrl();
+    if (_webhookEnabled) {
+      urlEl.textContent = getFullWebhookUrl();
+      document.getElementById('webhookUrlRow').style.display = '';
+      document.getElementById('webhookHelp').style.display = '';
+      document.getElementById('webhookCommandsList').style.display = '';
+    } else {
+      document.getElementById('webhookUrlRow').style.display = 'none';
+      document.getElementById('webhookHelp').style.display = 'none';
+      document.getElementById('webhookCommandsList').style.display = 'none';
+    }
     if (tokenEl) {
       tokenEl.textContent = _webhookToken;
     }
@@ -72,6 +81,12 @@ export async function toggleWebhook() {
     });
     _webhookEnabled = newState;
     statusEl.textContent = newState ? '已启用' : '已关闭';
+    document.getElementById('webhookUrlRow').style.display = newState ? '' : 'none';
+    document.getElementById('webhookHelp').style.display = newState ? '' : 'none';
+    document.getElementById('webhookCommandsList').style.display = newState ? '' : 'none';
+    if (newState) {
+      document.getElementById('webhookUrl').textContent = getFullWebhookUrl();
+    }
     showToast(newState ? 'Webhook 已启用' : 'Webhook 已关闭');
   } catch (e) {
     toggleEl.checked = !_webhookEnabled;

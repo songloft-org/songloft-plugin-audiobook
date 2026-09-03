@@ -5,8 +5,7 @@ import type { Book } from '../types';
 
 // ===== 关键词配置 =====
 
-const PLAY_BOOK_KEYWORDS = ['播放有声书', '播放听', '听', '放'];
-const PLAY_EPISODE_KEYWORDS = ['播放有声书', '播放听', '听'];
+const PLAY_BOOK_KEYWORDS = ['播放有声书', '有声书'];
 const EPISODE_PATTERN = /(?:第|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341百千万]+)(?:集|章|节|回)[^\d]*/;
 const EPISODE_NUM_PATTERN = /第?(\d+)(?:集|章|节|回)/;
 const CN_TO_ARABIC: Record<string, number> = {
@@ -14,8 +13,8 @@ const CN_TO_ARABIC: Record<string, number> = {
  十: 10, 百: 100, 千: 1000, 万: 10000,
 };
 
-const NEXT_EPISODE_KEYWORDS = ['下一集', '下一章', '下一段', '换一节', '继续播放', '继续', '接着来'];
-const PREV_EPISODE_KEYWORDS = ['上一集', '上一章', '上一段', '退一节', '倒回去', '回上一集', '回上一章'];
+const NEXT_EPISODE_KEYWORDS = ['下一集', '下一章', '下一段', '下一回', '换一节'];
+const PREV_EPISODE_KEYWORDS = ['上一集', '上一章', '上一段', '上一回', '回上一集', '回上一章'];
 
 // ===== 类型定义 =====
 

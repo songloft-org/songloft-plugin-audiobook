@@ -379,7 +379,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       const query = extractQuestion(messages ?? [], directMsg);
 
       if (!query || !query.trim()) {
-        pushWebhookLog('speaker', '空消息', `忽略空请求`, null);
+        pushWebhookLog('speaker', '空消息', `忽略空请求`, '❌');
         return jsonResponse({ success: true, data: { executed: false, reason: 'empty_message' } });
       }
 
@@ -388,12 +388,12 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       if (!intent) {
         // 不是有声书相关的口令，返回成功但不执行（让 miot-plus 自己处理）
         songloft.log.info(`[webhook] non-matching intent: "${query}"`);
-        pushWebhookLog('speaker', '意图未匹配', `query="${query}"`, null);
+        pushWebhookLog('speaker', '意图未匹配', `msg="${query}"`, null);
         return jsonResponse({ success: true, data: { executed: false, reason: 'no_match' } });
       }
 
       songloft.log.info(`[webhook] matched intent: ${intent.intent} book="${intent.bookTitle}" chapter=${intent.chapterIndex}`);
-      pushWebhookLog('voice', '意图匹配', `${intent.intent} book="${intent.bookTitle}" chapter=${intent.chapterIndex}`, null);
+      pushWebhookLog('voice', '意图匹配', `msg="${query}" ${intent.intent} book="${intent.bookTitle}" chapter=${intent.chapterIndex}`, null);
 
       // 解析目标设备（从 webhook payload 中取，或查找最近活跃设备）
       const target = await resolveDeviceTarget(bodyObj);
@@ -405,11 +405,11 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       // 执行操作
       const ok = await executeAudiobookAction(bm, intent, target.accountId, target.deviceId);
       if (!ok) {
-        pushWebhookLog('error', '执行失败', `${intent.intent} book="${intent.bookTitle}"`, '❌');
+        pushWebhookLog('error', '执行失败', `msg="${query}" ${intent.intent} book="${intent.bookTitle}"`, '❌');
         return jsonResponse({ success: false, error: '执行失败' });
       }
 
-      pushWebhookLog('voice', intent.intent === 'PLAY_EPISODE' ? '播放章节' : (intent.intent === 'PLAY_BOOK' ? '播放书籍' : (intent.intent === 'NEXT_EPISODE' ? '下一集' : '上一集')), `book="${intent.bookTitle}"`, '✅');
+      pushWebhookLog('voice', intent.intent === 'PLAY_EPISODE' ? '播放章节' : (intent.intent === 'PLAY_BOOK' ? '播放书籍' : (intent.intent === 'NEXT_EPISODE' ? '下一集' : '上一集')), `msg="${query}"`, '✅');
       return jsonResponse({ success: true, data: { executed: true, intent: intent.intent, bookTitle: intent.bookTitle } });
     } catch (e: any) {
       songloft.log.error(`[webhook] error: ${String(e)}`);
@@ -460,6 +460,12 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
   // GET /api/logs —— 获取日志（供前端日志面板展示）
   router.get('/api/logs', async () => {
     return jsonResponse({ success: true, data: webhooks });
+  });
+
+  // POST /api/logs —— 清空所有日志
+  router.post('/api/logs', async () => {
+    webhooks.length = 0;
+    return jsonResponse({ success: true, data: { cleared: true } });
   });
 }
 
