@@ -63,3 +63,19 @@ export interface PluginSettings {
   /** Webhook 服务器地址（推送音响时使用，如 http://192.168.x.x:58091） */
   serverHost?: string;
 }
+
+/** 设备会话（每设备独立，记录当前正在播放的有声书上下文） */
+export interface DeviceSession {
+  /** 设备 ID（miot-plus account_id） */
+  deviceId: string;
+  /** 当前播放的书籍 id */
+  bookId: string;
+  /** 当前播放的章节 id */
+  chapterId: string;
+  /** 章节号（1-based，用于日志展示） */
+  chapterIndex: number;
+  /** 书籍标题（用于日志展示） */
+  bookTitle: string;
+  /** 更新时间戳 */
+  updatedAt: number;
+}

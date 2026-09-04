@@ -1039,6 +1039,19 @@ async function doPushToDevice(accountId, deviceId, token) {
     if (json.success) {
       showToast('已推送到音响');
       writeLog('speaker', '手动推送成功', `${book.title} ${chapter.title}`, '✅');
+      // 通知后端更新设备会话，供 NEXT/PREV 口令使用
+      fetch('./api/session/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId,
+          deviceId,
+          bookId: book.id,
+          chapterId: chapter.id,
+          chapterIndex: chapter.index || 0,
+          bookTitle: book.title,
+        }),
+      }).catch(() => {});
       enterMiotRemote(accountId, deviceId, token);
       // 首次推送从本地断点续播，估算基线同步到断点位置
       const mr = state.miotRemote;

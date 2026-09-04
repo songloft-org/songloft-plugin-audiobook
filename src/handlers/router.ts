@@ -483,11 +483,56 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     } catch {}
     return jsonResponse({ success: true });
   });
+
+  // POST /api/session/update —— 前端手动推送成功后更新设备会话
+  router.post('/api/session/update', async (req: HTTPRequest) => {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : {};
+      const accountId = body.accountId as string;
+      if (!accountId) {
+        return jsonResponse({ success: false, error: 'missing accountId' }, 400);
+      }
+      updateDeviceSession(
+        accountId,
+        body.deviceId as string || '',
+        body.bookId as string || '',
+        body.chapterId as string || '',
+        Number(body.chapterIndex) || 0,
+        body.bookTitle as string || '',
+      );
+      return jsonResponse({ success: true });
+    } catch (e: any) {
+      return jsonResponse({ success: false, error: e.message || String(e) });
+    }
+  });
 }
 
 // ================================================================
 // 辅助函数：Webhook 执行逻辑
 // ================================================================
+
+/** 设备会话缓存（按 device_id 分组，支持同一账号多设备独立播放） */
+const deviceSessions: Record<string, import('../types').DeviceSession> = {};
+
+/** 更新设备会话 */
+function updateDeviceSession(
+  accountId: string,
+  deviceId: string,
+  bookId: string,
+  chapterId: string,
+  chapterIndex: number,
+  bookTitle: string,
+) {
+  deviceSessions[deviceId] = {
+    deviceId,
+    bookId,
+    chapterId,
+    chapterIndex,
+    bookTitle,
+    updatedAt: Date.now(),
+  };
+  songloft.log.info(`[webhook] 📱 session updated: did=${deviceId} book="${bookTitle}" ch#${chapterIndex}`);
+}
 
 /** MIoT API 基础路径（用于 push） */
 const MIOT_API_BASE = '/api/v1/jsplugin/miot';
@@ -634,6 +679,9 @@ async function pushChapterToMiot(
 
     if (ok) {
       bm.setProgress(book.id, chapter.id, seekSeconds, chapter.duration).catch(() => {});
+      // 记录设备会话，供 NEXT/PREV 口令使用
+      const chapterIdx = typeof chapter.index === 'number' ? chapter.index : 0;
+      updateDeviceSession(accountId, deviceId, book.id, chapter.id, chapterIdx, book.title);
     }
 
     return ok;
@@ -665,16 +713,19 @@ async function executeAudiobookAction(
 ): Promise<boolean> {
   const bookTitle = intent.bookTitle;
 
-  // ========== 必填字段校验 ==========
-  if (!bookTitle) {
+  // ========== 必填字段校验（仅 PLAY/PLAY_BOOK 需要 bookTitle） ==========
+  if (!bookTitle && intent.intent !== 'NEXT_EPISODE' && intent.intent !== 'PREV_EPISODE') {
     pushWebhookLog('error', '参数缺失', `intent=${intent.intent} bookTitle 为空`, '❌');
     return false;
   }
 
-  const book = findBookByTitle(bm, bookTitle);
-  if (!book) {
-    pushWebhookLog('error', '书籍不存在', `book="${bookTitle}"`, '❌');
-    return false;
+  let book: ReturnType<BookManager['getBookById']> | null = null;
+  if (bookTitle) {
+    book = findBookByTitle(bm, bookTitle);
+    if (!book) {
+      pushWebhookLog('error', '书籍不存在', `book="${bookTitle}"`, '❌');
+      return false;
+    }
   }
 
   switch (intent.intent) {
@@ -741,63 +792,53 @@ async function executeAudiobookAction(
     }
 
     case 'NEXT_EPISODE': {
-      // 下一集：从最近播放继续推下一章节
-      const recent = bm.getRecentlyPlayed();
-      const lastRecent = recent[0];
-      if (!lastRecent) {
-        pushWebhookLog('error', '无播放历史', `无法继续（最近未播放）`, '❌');
+      // 下一集：从设备会话缓存中获取当前播放的书籍和章节
+      const session = deviceSessions[deviceId];
+      if (!session) {
+        pushWebhookLog('error', '无会话', '尚未推送过有声书，请先播放某本书', '❌');
         return false;
       }
-
-      const detail = bm.getBookById(lastRecent.bookId);
+      const detail = bm.getBookById(session.bookId);
       if (!detail) {
-        pushWebhookLog('error', '书籍不存在', `recent bookId=${lastRecent.bookId}`, '❌');
+        pushWebhookLog('error', '书籍不存在', `bookId=${session.bookId}`, '❌');
         return false;
       }
-
-      const currentChapter = detail.chapters.find(c => c.id === lastRecent.chapterId);
+      const currentChapter = detail.chapters.find(c => c.id === session.chapterId);
       if (!currentChapter) {
-        pushWebhookLog('error', '当前章节缺失', `recent chapterId=${lastRecent.chapterId}`, '❌');
+        pushWebhookLog('error', '当前章节缺失', `chapterId=${session.chapterId}`, '❌');
         return false;
       }
-
       const nextChapter = detail.chapters.find(c => c.index === currentChapter.index + 1);
       if (!nextChapter) {
         songloft.log.info(`[webhook] NEXT_EPISODE: already at end`);
         return false;
       }
-
       songloft.log.info(`[webhook] ➡️ NEXT_EPISODE "${detail.title}" #${currentChapter.index} → #${nextChapter.index}`);
       return await pushChapterToMiot(bm, accountId, deviceId, detail, nextChapter, 0);
     }
 
     case 'PREV_EPISODE': {
-      // 上一集：回退到前一章节开头
-      const recent = bm.getRecentlyPlayed();
-      const lastRecent = recent[0];
-      if (!lastRecent) {
-        pushWebhookLog('error', '无播放历史', `无法回退（最近未播放）`, '❌');
+      // 上一集：从设备会话缓存中获取当前播放的书籍和章节，回退到前一章开头
+      const session = deviceSessions[deviceId];
+      if (!session) {
+        pushWebhookLog('error', '无会话', '尚未推送过有声书，请先播放某本书', '❌');
         return false;
       }
-
-      const detail = bm.getBookById(lastRecent.bookId);
+      const detail = bm.getBookById(session.bookId);
       if (!detail) {
-        pushWebhookLog('error', '书籍不存在', `recent bookId=${lastRecent.bookId}`, '❌');
+        pushWebhookLog('error', '书籍不存在', `bookId=${session.bookId}`, '❌');
         return false;
       }
-
-      const currentChapter = detail.chapters.find(c => c.id === lastRecent.chapterId);
+      const currentChapter = detail.chapters.find(c => c.id === session.chapterId);
       if (!currentChapter) {
-        pushWebhookLog('error', '当前章节缺失', `recent chapterId=${lastRecent.chapterId}`, '❌');
+        pushWebhookLog('error', '当前章节缺失', `chapterId=${session.chapterId}`, '❌');
         return false;
       }
-
       const prevChapter = detail.chapters.find(c => c.index === currentChapter.index - 1);
       if (!prevChapter) {
         songloft.log.info(`[webhook] PREV_EPISODE: already at start`);
         return false;
       }
-
       songloft.log.info(`[webhook] ⬅️ PREV_EPISODE "${detail.title}" #${currentChapter.index} → #${prevChapter.index}`);
       return await pushChapterToMiot(bm, accountId, deviceId, detail, prevChapter, 0);
     }
