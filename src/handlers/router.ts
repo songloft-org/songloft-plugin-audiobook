@@ -587,6 +587,7 @@ async function pushChapterToMiot(
     // 构建完整 URL（含协议前缀，避免 Go fetch 报错 "unsupported protocol scheme"）
     const fullUrl = await miotUrl('/mina/play-url');
     songloft.log.info(`[webhook] 📡 POST ${fullUrl}`);
+    pushWebhookLog('voice', '推送音响', `url="${fullUrl}"`, null);
 
     const resp = await fetch(fullUrl, {
       method: 'POST',
