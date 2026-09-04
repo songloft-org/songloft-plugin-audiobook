@@ -75,9 +75,14 @@ export async function toggleWebhook() {
 
   const newState = toggleEl.checked;
   try {
+    // 启用时将当前 origin 作为 serverHost 保存（供语音口令推送音响使用）
+    const body = { enabled: newState };
+    if (newState && window.location.origin) {
+      body.server_host = window.location.origin;
+    }
     await api('/api/webhook/toggle', {
       method: 'POST',
-      body: JSON.stringify({ enabled: newState }),
+      body: JSON.stringify(body),
     });
     _webhookEnabled = newState;
     statusEl.textContent = newState ? '已启用' : '已关闭';

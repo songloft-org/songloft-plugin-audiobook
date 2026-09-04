@@ -60,4 +60,6 @@ export interface PluginSettings {
   webhookEnabled?: boolean;
   /** Webhook 认证 token（自动生成的随机字符串） */
   webhookToken?: string;
+  /** Webhook 服务器地址（推送音响时使用，如 http://192.168.x.x:58091） */
+  serverHost?: string;
 }

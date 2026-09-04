@@ -302,8 +302,11 @@ export class BookManager {
     return !!this.settings.webhookEnabled;
   }
 
-  async setWebhookEnabled(enabled: boolean): Promise<void> {
+  async setWebhookEnabled(enabled: boolean, serverHost?: string): Promise<void> {
     this.settings.webhookEnabled = enabled;
+    if (typeof serverHost === 'string' && serverHost.trim()) {
+      this.settings.serverHost = serverHost.trim();
+    }
     await this.saveSettings();
   }
 

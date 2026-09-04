@@ -428,22 +428,24 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     const enabled = bm.isWebhookEnabled();
     const path = generateWebhookUrl();
     const token = bm.getWebhookToken();
+    const serverHost = bm.getSettings().serverHost || '';
     return jsonResponse({
       success: true,
-      data: { enabled, url: path, token },
+      data: { enabled, url: path, token, serverHost },
     });
   });
 
   // POST /api/webhook/toggle —— 切换 Webhook 开关
   router.post('/api/webhook/toggle', async (req: HTTPRequest) => {
     try {
-      let bodyObj: Record<string, boolean> = {};
+      let bodyObj: Record<string, unknown> = {};
       try {
         const raw = typeof req.body === 'string' ? req.body : '';
         if (raw) bodyObj = JSON.parse(raw);
       } catch { /* ignore */ }
       const enabled = !!bodyObj.enabled;
-      await bm.setWebhookEnabled(enabled);
+      const serverHost = typeof bodyObj.server_host === 'string' ? bodyObj.server_host : undefined;
+      await bm.setWebhookEnabled(enabled, serverHost);
       return jsonResponse({ success: true, data: { enabled } });
     } catch (e: any) {
       return jsonResponse({ success: false, error: e.message || String(e) });
@@ -568,12 +570,24 @@ async function pushChapterToMiot(
   chapter: import('../types').Chapter,
   seekSeconds: number,
 ): Promise<boolean> {
-  let audioPath: string;
-  try {
-    // 构建音频路径（内部路由）
-    audioPath = seekSeconds > 0
-      ? `/api/books/${book.id}/chapters/${chapter.id}/audio?seek=${seekSeconds}`
-      : `/api/books/${book.id}/chapters/${chapter.id}/audio`;
+    try {
+    // 获取认证 token（提前到 URL 构造前）
+    const token = await getAuthToken();
+
+    // 从 settings 读取服务器地址（用户通过 Webhook 启用时保存的公网/局域网地址）
+    const serverHost = bm.getSettings().serverHost || '';
+    if (!serverHost) {
+      songloft.log.warn('[webhook] ❌ serverHost 未设置，语音口令推送音响将无法工作，请在音响插件中配置正确的局域网地址');
+      pushWebhookLog('error', '推送准备', 'serverHost 未设置', '❌');
+      return false;
+    }
+
+    // 构建完整音频 URL（含 access_token，与手动推送保持一致）
+    const audioPath = `/api/v1/jsplugin/audiobook/api/books/${encodeURIComponent(book.id)}/chapters/${encodeURIComponent(chapter.id)}/audio`;
+    const params: string[] = [];
+    if (token) params.push(`access_token=${encodeURIComponent(token)}`);
+    if (seekSeconds > 0) params.push(`seek=${seekSeconds}`);
+    const audioUrl = params.length > 0 ? `${serverHost}${audioPath}?${params.join('&')}` : `${serverHost}${audioPath}`;
 
     songloft.log.info(`[webhook] 🔊 pushChapterToMiot start book="${book.title}" ch="${chapter.title}" seek=${seekSeconds} aid=${accountId} did=${deviceId}`);
 
@@ -585,18 +599,16 @@ async function pushChapterToMiot(
     const body = JSON.stringify({
       account_id: accountId,
       device_id: deviceId,
-      url: audioPath,
+      url: audioUrl,
     });
 
-    // 获取认证 token
-    const token = await getAuthToken();
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     // 构建完整 URL（含协议前缀，避免 Go fetch 报错 "unsupported protocol scheme"）
     const fullUrl = await miotUrl('/mina/play-url');
     songloft.log.info(`[webhook] 📡 POST ${fullUrl}`);
-    pushWebhookLog('voice', '口令推送音响', `url="${fullUrl}"`, null);
+    pushWebhookLog('voice', '口令推送音响', `url="${audioUrl}"`, null);
 
     const resp = await fetch(fullUrl, {
       method: 'POST',
