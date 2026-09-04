@@ -476,6 +476,15 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
 /** MIoT API 基础路径（用于 push） */
 const MIOT_API_BASE = '/api/v1/jsplugin/miot';
 
+/** 构建 miot-plus 内部 HTTP 完整 URL（含协议前缀，避免 Go fetch 报错 "unsupported protocol scheme"） */
+async function miotUrl(path: string): Promise<string> {
+  const hostUrl = await songloft.plugin.getHostUrl();
+  if (!hostUrl) {
+    throw new Error('Host URL not available from songloft.plugin.getHostUrl()');
+  }
+  return hostUrl + MIOT_API_BASE + path;
+}
+
 /** 导出给前端调用的日志查询函数（通过 HTTP 路由调用，非直接导出） */
 export function getWebhookLogs(): Array<{ time: number; type: string; action: string; detail: string; result: string | null }> {
   return [...webhooks];
@@ -571,8 +580,8 @@ async function pushChapterToMiot(
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    // 构建完整 URL（与 lxbridge 一致）
-    const fullUrl = `${MIOT_API_BASE}/mina/play-url`;
+    // 构建完整 URL（含协议前缀，避免 Go fetch 报错 "unsupported protocol scheme"）
+    const fullUrl = await miotUrl('/mina/play-url');
     songloft.log.info(`[webhook] 📡 POST ${fullUrl}`);
 
     const resp = await fetch(fullUrl, {
@@ -625,7 +634,7 @@ async function resolveDeviceTarget(body: Record<string, unknown>): Promise<{ acc
     const headers: Record<string, string> = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const resp = await fetch(`${MIOT_API_BASE}/mina/devices`, { headers });
+    const resp = await fetch(await miotUrl('/mina/devices'), { headers });
     if (!resp.ok) {
       songloft.log.warn(`[webhook] ⚠️ failed to get devices: ${resp.status}`);
       return null;
