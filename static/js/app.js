@@ -40,14 +40,8 @@ async function fetchLogs() {
     if (!res.ok) return;
     const json = await res.json();
     if (json?.success && Array.isArray(json.data)) {
-      // 新增条目才追加，避免重复渲染
-      const data = json.data;
-      const newLen = data.length - logEntries.length;
-      let startIdx = 0;
-      if (newLen > 0) startIdx = data.length - newLen;
-      for (let i = startIdx; i < data.length; i++) {
-        logEntries.push(data[i]);
-      }
+      // 直接覆盖上次快照，避免增量追加产生重复
+      logEntries = json.data.slice();
       renderLogs();
     }
   } catch { /* ignore */ }
@@ -267,7 +261,7 @@ function bindEvents() {
   if (btnReset) btnReset.addEventListener('click', resetWebhookToken);
 
   // 日志面板
-  document.getElementById('btnLogPanel').addEventListener('click', toggleLogPanel);
+  document.getElementById('btnOpenLogPanel').addEventListener('click', toggleLogPanel);
   document.getElementById('btnCloseLogPanel').addEventListener('click', toggleLogPanel);
   document.getElementById('btnClearLogs').addEventListener('click', clearLogs);
   document.getElementById('btnCopyLogs').addEventListener('click', copyLogs);

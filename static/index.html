@@ -266,10 +266,7 @@
       <div class="player-fab-ring"></div>
     </div>
 
-    <!-- 日志面板切换按钮（右下角） -->
-    <button id="btnLogPanel" class="log-toggle-btn" title="查看日志">📋</button>
-
-    <!-- 编辑弹窗 -->
+    <audio id="audio" preload="metadata"></audio>
     <div id="editOverlay" class="edit-overlay" hidden>
       <div class="edit-modal">
         <h3>编辑书籍信息</h3>
@@ -378,6 +375,9 @@
           <div class="settings-section">
             <a class="settings-project-link" href="https://github.com/mimusic-org/mimusic-jsplugin-releases/tree/audiobook" target="_blank" rel="noopener">📝 项目主页 · 提交 Issue</a>
           </div>
+          <div class="settings-section">
+            <button class="btn btn-ghost settings-log-btn" id="btnOpenLogPanel">📋 查看日志</button>
+          </div>
         </div>
       </div>
     </div>
@@ -391,16 +391,15 @@
     <div id="logPanel" class="log-panel">
       <div class="log-panel-inner">
         <div class="log-panel-header">
-          <span>📋 日志面板</span>
-          <button class="log-close-btn" id="btnCloseLogPanel">✕</button>
+          <span class="lp-title">📋 日志面板 · <span id="logCount">共 0 条</span></span>
+          <div class="lp-actions">
+            <button class="log-tb-btn" id="btnClearLogs">清屏</button>
+            <button class="log-tb-btn" id="btnCopyLogs">复制</button>
+            <button class="log-close-btn" id="btnCloseLogPanel">✕</button>
+          </div>
         </div>
         <div class="log-panel-body" id="logPanelBody">
           <div class="log-empty">暂无日志</div>
-        </div>
-        <div class="log-panel-footer">
-          <span id="logCount">共 0 条</span>
-          <button class="log-tb-btn" id="btnClearLogs">清屏</button>
-          <button class="log-tb-btn" id="btnCopyLogs">复制</button>
         </div>
       </div>
     </div>

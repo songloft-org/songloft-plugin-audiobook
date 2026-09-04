@@ -482,6 +482,10 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 8px;
   margin-bottom: 16px;
 }
+.player-full .back-btn {
+  margin-bottom: 0;
+  align-self: flex-start;
+}
 .back-btn:hover { background: var(--primary-container); color: var(--on-primary-container); }
 
 .book-hero {
@@ -766,7 +770,7 @@ input[type="range"]::-moz-range-thumb {
 .player-full {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   padding: 0 24px 32px;
   max-width: 480px;
   margin: 0 auto;
@@ -1214,6 +1218,11 @@ input[type="range"]::-moz-range-thumb {
 .settings-project-link:hover {
   text-decoration: underline;
 }
+.settings-log-btn {
+  width: 100%;
+  padding: 8px 0;
+  font-size: 14px;
+}
 
 /* ========== 响应式 ========== */
 @media (max-width: 640px) {
@@ -1421,6 +1430,10 @@ input[type="range"]::-moz-range-thumb {
   color: var(--text);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+.lp-title {
+  white-space: nowrap;
 }
 
 .log-close-btn {
