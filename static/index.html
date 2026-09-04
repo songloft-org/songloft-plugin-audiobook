@@ -340,19 +340,22 @@
               <button class="btn btn-ghost btn-sm" id="btnCopyWebhook" title="复制完整地址">📋 复制</button>
               <button class="btn btn-ghost btn-sm" id="btnResetToken" title="重新生成 Token">🔄 重置</button>
             </div>
-            <div class="settings-webhook-help" id="webhookHelp">将以上地址填写到小爱插件的 Webhook 回调设置中，即可通过语音控制有声书播放。</div>
+            <div class="settings-webhook-help" id="webhookHelp">将以上地址填写到音响插件的 Webhook 回调设置中，即可通过语音控制有声书播放。</div>
             <div id="webhookCommandsList">
               <div class="settings-section-title" style="margin-top:12px;margin-bottom:6px;font-size:0.95rem;">支持的语音指令</div>
               <table class="webhook-commands-table">
                 <thead><tr><th>意图</th><th>示例口令</th></tr></thead>
                 <tbody>
-                  <tr><td>播放有声书（续听）</td><td><code>播放有声书三国演义</code>、<code>有声书三国</code></td></tr>
-                  <tr><td>指定章节播放</td><td><code>播放有声书三国演义第三十回</code>、<code>有声书三国第5章</code></td></tr>
-                  <tr><td>下一集</td><td><code>下一集</code>、<code>下一章</code>、<code>下一段</code>、<code>下一回</code>、<code>换一节</code></td></tr>
-                  <tr><td>上一集</td><td><code>上一集</code>、<code>上一章</code>、<code>上一回</code>、<code>回上一集</code>、<code>回上一章</code></td></tr>
+                  <tr><td>播放有声书（续听）</td><td><code>「播放有声书」三国演义</code>、<code>「有声书」三国</code></td></tr>
+                  <tr><td>指定章节播放</td><td><code>「播放有声书」三国演义第三十回</code>、<code>「有声书」三国第五章</code></td></tr>
+                  <tr><td>下一集</td><td><code>下一集</code>、<code>下一章</code>、<code>下一段</code>、<code>下一节</code>、<code>下一回</code></td></tr>
+                  <tr><td>上一集</td><td><code>上一集</code>、<code>上一章</code>、<code>上一段</code>、<code>上一节</code>、<code>上一回</code></td></tr>
                 </tbody>
+                <tfoot>
+                  <tr><td colspan="2">章节标识词统一为：集 / 章 / 段 / 节 / 回</td></tr>
+                </tfoot>
               </table>
-              <div class="webhook-commands-hint">章节标识词统一为：集 / 章 / 节 / 回</div>
+              <div class="webhook-commands-hint"><b>PS：必须保证上述口令词未与音响插件已有口令冲突！</b></div>
             </div>
           </div>
           <div class="settings-section">

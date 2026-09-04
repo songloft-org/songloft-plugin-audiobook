@@ -7,14 +7,14 @@ import type { Book } from '../types';
 
 const PLAY_BOOK_KEYWORDS = ['播放有声书', '有声书'];
 const EPISODE_PATTERN = /(?:第|[\u4e00\u4e8c\u4e09\u56db\u4e94\u516d\u4e03\u516b\u4e5d\u5341百千万]+)(?:集|章|节|回)[^\d]*/;
-const EPISODE_NUM_PATTERN = /第?(\d+)(?:集|章|节|回)/;
+const EPISODE_NUM_PATTERN = /第?(\d+)(?:集|章|段|节|回)/;
 const CN_TO_ARABIC: Record<string, number> = {
  零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
  十: 10, 百: 100, 千: 1000, 万: 10000,
 };
 
-const NEXT_EPISODE_KEYWORDS = ['下一集', '下一章', '下一段', '下一回', '换一节'];
-const PREV_EPISODE_KEYWORDS = ['上一集', '上一章', '上一段', '上一回', '回上一集', '回上一章'];
+const NEXT_EPISODE_KEYWORDS = ['下一集', '下一章', '下一段', '下一节', '下一回'];
+const PREV_EPISODE_KEYWORDS = ['上一集', '上一章', '上一段', '上一节', '上一回'];
 
 // ===== 类型定义 =====
 
