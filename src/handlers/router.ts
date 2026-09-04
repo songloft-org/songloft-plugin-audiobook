@@ -472,6 +472,15 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
     webhooks.length = 0;
     return jsonResponse({ success: true, data: { cleared: true } });
   });
+
+  // POST /api/logs/write —— 前端推送音响时写入日志（供前端日志面板展示）
+  router.post('/api/logs/write', async (req: HTTPRequest) => {
+    try {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body) : {};
+      pushWebhookLog(body.type || 'speaker', body.action || '', body.detail || null, body.result || null);
+    } catch {}
+    return jsonResponse({ success: true });
+  });
 }
 
 // ================================================================
@@ -587,7 +596,7 @@ async function pushChapterToMiot(
     // 构建完整 URL（含协议前缀，避免 Go fetch 报错 "unsupported protocol scheme"）
     const fullUrl = await miotUrl('/mina/play-url');
     songloft.log.info(`[webhook] 📡 POST ${fullUrl}`);
-    pushWebhookLog('voice', '推送音响', `url="${fullUrl}"`, null);
+    pushWebhookLog('voice', '口令推送音响', `url="${fullUrl}"`, null);
 
     const resp = await fetch(fullUrl, {
       method: 'POST',

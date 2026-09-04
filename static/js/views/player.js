@@ -489,6 +489,18 @@ export function updateSleepTimerUI() {
 
 // ==================== 推送到音响 + 遥控模式 ====================
 
+/** 通过后端接口写入日志（供前端日志面板展示） */
+async function writeLog(type, action, detail, result) {
+  try {
+    const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
+    fetch('./api/logs/write', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(auth.accessToken ? { Authorization: 'Bearer ' + auth.accessToken } : {}) },
+      body: JSON.stringify({ type, action, detail, result }),
+    }).catch(() => {});
+  } catch {}
+}
+
 function getAuthToken() {
   try {
     const auth = JSON.parse(localStorage.getItem('songloft-auth') || '{}');
@@ -714,10 +726,10 @@ async function pushNextChapterToMiot() {
   const next = chapters[idx + 1];
   state.currentChapter = next;
   updatePlayerInfo();
-  await pushChapterUrlToMiot(state.currentBookForPlayer, next);
+  await pushChapterUrlToMiot(state.currentBookForPlayer, next, undefined, '自动下一集');
 }
 
-async function pushChapterUrlToMiot(book, chapter, seekSeconds) {
+async function pushChapterUrlToMiot(book, chapter, seekSeconds, action) {
   const r = state.miotRemote;
   if (!r) return;
 
@@ -753,6 +765,9 @@ async function pushChapterUrlToMiot(book, chapter, seekSeconds) {
     audioUrl += (audioUrl.includes('?') ? '&' : '?') + `seek=${Number(seekSeconds)}`;
   }
 
+  // 写入日志：推送地址给音响
+  writeLog('speaker', action || '推送音响', `${book.title} ${chapter.title} → ${audioUrl}`, null);
+
   try {
     const json = await miotPost('/mina/play-url', {
       account_id: r.accountId,
@@ -768,11 +783,14 @@ async function pushChapterUrlToMiot(book, chapter, seekSeconds) {
       r._graceUntil = Date.now() + 8000;
       r._sawPosition = false;
       showToast(`正在播放：${chapter.title}`);
+      writeLog('speaker', '推送成功', `${book.title} ${chapter.title}`, '✅');
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
+      writeLog('error', '推送失败', `${book.title} ${chapter.title}: ${json.error || '未知错误'}`, '❌');
     }
   } catch (e) {
     showToast('推送失败：' + e.message);
+    writeLog('error', '推送异常', `${book.title} ${chapter.title}: ${e.message}`, '❌');
   }
 }
 
@@ -796,7 +814,7 @@ async function miotSeek(seconds) {
   if (r._pushing) { r._seeking = false; return; } // 推送中（如自动续播），忽略拖动
   r._pushing = true;
   try {
-    await pushChapterUrlToMiot(state.currentBookForPlayer, state.currentChapter, seconds);
+    await pushChapterUrlToMiot(state.currentBookForPlayer, state.currentChapter, seconds, '遥控seek');
   } finally {
     r._pushing = false;
     r._seeking = false;
@@ -851,7 +869,7 @@ export async function miotPrevChapter() {
     const prev = chapters[idx - 1];
     state.currentChapter = prev;
     updatePlayerInfo();
-    await pushChapterUrlToMiot(state.currentBookForPlayer, prev);
+    await pushChapterUrlToMiot(state.currentBookForPlayer, prev, undefined, '遥控上一集');
   }
 }
 
@@ -1009,6 +1027,9 @@ async function doPushToDevice(accountId, deviceId, token) {
     pushUrl += (pushUrl.includes('?') ? '&' : '?') + `seek=${lockedPos}`;
   }
 
+  // 写入日志：推送地址
+  writeLog('speaker', '手动推送音响', `${book.title} ${chapter.title} → ${pushUrl}`, null);
+
   try {
     const json = await miotPost('/mina/play-url', {
       account_id: accountId,
@@ -1017,6 +1038,7 @@ async function doPushToDevice(accountId, deviceId, token) {
     }, token);
     if (json.success) {
       showToast('已推送到音响');
+      writeLog('speaker', '手动推送成功', `${book.title} ${chapter.title}`, '✅');
       enterMiotRemote(accountId, deviceId, token);
       // 首次推送从本地断点续播，估算基线同步到断点位置
       const mr = state.miotRemote;
@@ -1029,9 +1051,11 @@ async function doPushToDevice(accountId, deviceId, token) {
       }
     } else {
       showToast('推送失败：' + (json.error || '未知错误'));
+      writeLog('error', '手动推送失败', `${book.title} ${chapter.title}: ${json.error || '未知错误'}`, '❌');
     }
   } catch (e) {
     showToast('推送失败：' + e.message);
+    writeLog('error', '手动推送异常', `${book.title} ${chapter.title}: ${e.message}`, '❌');
   }
 }
 
