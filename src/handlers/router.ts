@@ -367,6 +367,7 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
       const queryToken = (q.token as string) || '';
       const headerToken = (req.headers as Record<string, string>)?.['X-Webhook-Token'] || '';
       const token = queryToken || headerToken;
+      pushWebhookLog('config', '------------------------------------', null, null);
       if (!bm.verifyWebhookToken(token)) {
         pushWebhookLog('error', '认证失败', `无效或缺失 token`, '❌');
         return jsonResponse({ success: false, error: '认证失败' }, 401);
@@ -639,6 +640,14 @@ async function pushChapterToMiot(
     // 确保文件可播放（可能触发转码）
     const playablePath = await ensurePlayablePath(chapter.fileRelPath);
     songloft.log.info(`[webhook] ▶ file ready: ${playablePath}`);
+
+    // 校验文件确实存在且非空
+    const stat = await songloft.fs.stat(playablePath).catch(() => null);
+    if (!stat || !Number(stat.size) || Number(stat.size) < 100) {
+      pushWebhookLog('error', '推送准备', `文件不可用: ${playablePath} (size=${stat?.size ?? 'N/A'})`, '❌');
+      songloft.log.error(`[webhook] ❌ playable file missing or empty: ${playablePath}`);
+      return false;
+    }
 
     // 构造请求体
     const body = JSON.stringify({
