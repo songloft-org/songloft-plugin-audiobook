@@ -26,6 +26,7 @@ function intentToType(intent: string): string {
     case 'PLAY_BOOK': return 'voice';
     case 'NEXT_EPISODE': return 'voice';
     case 'PREV_EPISODE': return 'voice';
+    case 'STOP': return 'voice';
     default: return 'speaker';
   }
 }
@@ -415,7 +416,12 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
         return jsonResponse({ success: false, error: '执行失败' });
       }
 
-      pushWebhookLog('voice', intent.intent === 'PLAY_EPISODE' ? '播放章节' : (intent.intent === 'PLAY_BOOK' ? '播放书籍' : (intent.intent === 'NEXT_EPISODE' ? '下一集' : '上一集')), `msg="${query}"`, '✅');
+      pushWebhookLog('voice',
+        intent.intent === 'PLAY_EPISODE' ? '播放章节' :
+        (intent.intent === 'PLAY_BOOK' ? '播放书籍' :
+        (intent.intent === 'NEXT_EPISODE' ? '下一集' :
+        (intent.intent === 'PREV_EPISODE' ? '上一集' :
+        (intent.intent === 'STOP' ? '停止播放' : '未知')))), `msg="${query}"`, '✅');
       return jsonResponse({ success: true, data: { executed: true, intent: intent.intent, bookTitle: intent.bookTitle } });
     } catch (e: any) {
       songloft.log.error(`[webhook] error: ${String(e)}`);
@@ -514,6 +520,17 @@ export function registerHandlers(router: AppRouter, bm: BookManager): void {
 
 /** 设备会话缓存（按 device_id 分组，支持同一账号多设备独立播放） */
 const deviceSessions: Record<string, import('../types').DeviceSession> = {};
+
+/** ========== 自动下一集配置 ========== */
+const AUTO_NEXT_POS_END_THRESHOLD = 0;   // 位置判定：position >= totalDur - N 秒视为结束（与前端一致）
+const AUTO_NEXT_TIME_TOLERANCE = 1;     // 时间兜底：elapsed >= dur + N 秒触发切换
+/** ================================ */
+
+/** 自动下一集轮询定时器（按 deviceId 隔离） */
+const autoNextTimers: Record<string, ReturnType<typeof setInterval>> = {};
+const autoNextState: Record<string, { accountId: string; bookId: string; chapterId: string; chapterIndex: number; bookTitle: string }> = {};
+/** 每集推送的时间戳（按 bookId+deviceId 隔离，用于时间兜底判定） */
+const autoNextPushedAt: Record<string, number> = {};
 
 /** 更新设备会话 */
 function updateDeviceSession(
@@ -687,10 +704,37 @@ async function pushChapterToMiot(
     songloft.log.info(`[webhook] ✅ pushed to miot: ${ok ? 'OK' : 'FAILED'} book="${book.title}" ch="${chapter.title}"`);
 
     if (ok) {
-      bm.setProgress(book.id, chapter.id, seekSeconds, chapter.duration).catch(() => {});
+      // 获取真实时长：优先已有的进度 duration，否则 probe
+      let realDur = chapter.duration ?? 0;
+      try {
+        const playablePath = await ensurePlayablePath(chapter.fileRelPath);
+        realDur = await probeDuration(playablePath);
+        if (realDur > 0) {
+          songloft.log.info(`[push] probed dur=${realDur}s for "${book.title}" #${chapter.index}`);
+        } else {
+          songloft.log.warn(`[push] probe returned 0, using cached: ${realDur}s`);
+          realDur = chapter.duration ?? 0;
+        }
+      } catch (e) {
+        songloft.log.warn(`[push] probe failed: ${String(e)}, using cached`);
+        realDur = chapter.duration ?? 0;
+      }
+      bm.setProgress(book.id, chapter.id, seekSeconds, realDur).catch(() => {});
+
       // 记录设备会话，供 NEXT/PREV 口令使用
       const chapterIdx = typeof chapter.index === 'number' ? chapter.index : 0;
       updateDeviceSession(accountId, deviceId, book.id, chapter.id, chapterIdx, book.title);
+
+      // 记录推送时间戳（用于计时判定自动下一集）
+      autoNextPushedAt[book.id + '_' + deviceId] = Date.now();
+
+      // 更新最近播放列表（供下次未指定集数时断点续播使用）
+      await bm.addRecentlyPlayed(book.id, chapter.id).catch(() => {});
+
+      // 启动自动下一集（不阻塞返回）
+      getAuthToken()
+        .then(token => startAutoNext(bm, accountId, deviceId, book, chapter, token))
+        .catch(() => {});
     }
 
     return ok;
@@ -723,7 +767,7 @@ async function executeAudiobookAction(
   const bookTitle = intent.bookTitle;
 
   // ========== 必填字段校验（仅 PLAY/PLAY_BOOK 需要 bookTitle） ==========
-  if (!bookTitle && intent.intent !== 'NEXT_EPISODE' && intent.intent !== 'PREV_EPISODE') {
+  if (!bookTitle && intent.intent !== 'NEXT_EPISODE' && intent.intent !== 'PREV_EPISODE' && intent.intent !== 'STOP') {
     pushWebhookLog('error', '参数缺失', `intent=${intent.intent} bookTitle 为空`, '❌');
     return false;
   }
@@ -738,6 +782,50 @@ async function executeAudiobookAction(
   }
 
   switch (intent.intent) {
+    case 'STOP': {
+      // 停止播放：取消自动下一集轮询 + 保存当前进度 + 记录最近播放
+      songloft.log.info(`[webhook] STOP playback on device ${deviceId}`);
+
+      // 获取当前播放上下文（设备会话或自动轮询状态）
+      const session = deviceSessions[deviceId];
+      if (session) {
+        const book = bm.getBookById(session.bookId);
+        if (book) {
+          // 查询 miMusic 获取当前进度
+          let currentPosition = 0;
+          try {
+            const url = await miotUrl(`/mina/status?account_id=${accountId}&device_id=${deviceId}`);
+            const resp = await fetch(url, {
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (resp.ok) {
+              const json = await resp.json();
+              if (json.success && json.data) {
+                currentPosition = json.data.position ?? 0;
+              }
+            }
+          } catch { /* ignore */ }
+
+          // 保存章节进度（position 用于断点续播）
+          const chapter = book.chapters.find(c => c.id === session.chapterId);
+          if (chapter) {
+            bm.setProgress(book.id, session.chapterId, currentPosition, chapter.duration).catch(() => {});
+            songloft.log.info(`[webhook] STOP saved progress: "${book.title}" #${session.chapterIndex} "${chapter.title}" pos=${currentPosition}s`);
+            pushWebhookLog('voice', `停止播放并保存进度`, `${book.title} #${session.chapterIndex} pos=${currentPosition.toFixed(0)}s/${chapter.duration}s`, null);
+          }
+
+          // 更新最近播放列表（供下次未指定集数时断点续播使用）
+          await bm.addRecentlyPlayed(book.id, session.chapterId);
+          songloft.log.info(`[webhook] stopped book "${book.title}" #${session.chapterIndex}, updated recentlyPlayed`);
+        }
+      } else {
+        pushWebhookLog('voice', '停止播放', `msg="${intent.rawQuery}"`, null);
+      }
+
+      stopAutoNext(deviceId);
+      return true;
+    }
+
     case 'PLAY_EPISODE': {
       // 精确指定章节：按书名 + 章节号匹配
       const chapterIndex = intent.chapterIndex!; // 1-based
@@ -856,6 +944,182 @@ async function executeAudiobookAction(
       pushWebhookLog('error', '未知意图', `intent=${intent.intent}`, '❌');
       return false;
   }
+}
+
+/** 停止指定设备的自动下一集轮询 */
+function stopAutoNext(deviceId: string): void {
+  if (autoNextTimers[deviceId]) {
+    clearInterval(autoNextTimers[deviceId]);
+    delete autoNextTimers[deviceId];
+  }
+  delete autoNextState[deviceId];
+  delete autoNextPushedAt[deviceId];
+}
+
+/** 启动自动下一集轮询 */
+async function startAutoNext(
+  bm: BookManager,
+  accountId: string,
+  deviceId: string,
+  book: ReturnType<BookManager['getBookById']>,
+  chapter: import('../types').Chapter,
+  token: string,
+): Promise<void> {
+  // 清除旧的轮询
+  stopAutoNext(deviceId);
+
+  const chapterIdx = typeof chapter.index === 'number' ? chapter.index : 0;
+  autoNextState[deviceId] = { accountId, bookId: book.id, chapterId: chapter.id, chapterIndex: chapterIdx, bookTitle: book.title };
+
+  // ========== 获取真实时长：先用已有的，没有则 ffprobe 精确探测 ==========
+  let totalDur = (bm.getProgress(book.id, chapter.id)?.duration) ?? 0;
+  if (!totalDur || totalDur <= 0) {
+    try {
+      const playablePath = await ensurePlayablePath(chapter.fileRelPath);
+      totalDur = await probeDuration(playablePath);
+      if (totalDur > 0) {
+        bm.setProgress(book.id, chapter.id, 0, totalDur).catch(() => {});
+        songloft.log.info(`[auto-next] probed duration ${totalDur}s for "${book.title}" #${chapterIdx}`);
+        pushWebhookLog('speaker', '自动下一集已开启', `${book.title} ${chapter.title} dur=${totalDur}s → 等待播放结束`, null);
+      } else {
+        songloft.log.warn(`[auto-next] probe failed (${playablePath}), using cached duration`);
+        totalDur = chapter.duration ?? 0;
+        pushWebhookLog('speaker', '自动下一集已开启', `${book.title} ${chapter.title} (dur未知) → 等待播放结束`, null);
+      }
+    } catch (e) {
+      songloft.log.warn(`[auto-next] probe error: ${String(e)}, using cached duration`);
+      totalDur = chapter.duration ?? 0;
+      pushWebhookLog('speaker', '自动下一集已开启', `${book.title} ${chapter.title} (dur未知) → 等待播放结束`, null);
+    }
+  } else {
+    pushWebhookLog('speaker', '自动下一集已开启', `${book.title} ${chapter.title} dur=${totalDur}s → 等待播放结束`, null);
+  }
+
+  if (!totalDur || totalDur <= 0) {
+    songloft.log.error(`[auto-next] no duration available for "${book.title}" #${chapterIdx}, aborting auto-next`);
+    return;
+  }
+
+  // 短等待给底层缓存刷新时间（3秒即可）
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  // 检查是否已被取消（会话已变更）
+  if (!autoNextState[deviceId]) return;
+
+  // 记录本集推送时间戳（用于计时判定兜底）
+  autoNextPushedAt[book.id + '_' + deviceId] = Date.now();
+
+  pushWebhookLog('speaker', '自动下一集轮询已启动', `${book.title} ${chapter.title}`, null);
+
+  const poll = setInterval(async () => {
+    if (!autoNextState[deviceId]) {
+      clearInterval(poll);
+      delete autoNextTimers[deviceId];
+      return;
+    }
+
+    const state = autoNextState[deviceId];
+
+    try {
+      // 获取章节总时长（优先 probe 真值，其次缓存）
+      let totalDur = (bm.getProgress(state.bookId, state.chapterId)?.duration) ?? 0;
+
+      // 如果缓存时长为 0 或明显不合理（比如小于 15s），尝试实时 probe 修正
+      if ((!totalDur || totalDur <= 0)) {
+        const detail = bm.getBookById(state.bookId);
+        const ch = detail?.chapters.find(c => c.id === state.chapterId);
+        if (ch) {
+          try {
+            const playablePath = await ensurePlayablePath(ch.fileRelPath);
+            totalDur = await probeDuration(playablePath);
+            if (totalDur > 0) {
+              bm.setProgress(state.bookId, state.chapterId, 0, totalDur).catch(() => {});
+              songloft.log.info(`[auto-next] late-probed dur=${totalDur}s for "${state.bookTitle}" #${state.chapterIndex}`);
+            }
+          } catch { /* ignore */ }
+        }
+        if (!totalDur || totalDur <= 0) return;
+      }
+
+      // ---------- /mina/status 获取当前播放进度 position → 判定是否播完 ----------
+      let timedOut = false;
+      try {
+        const url = await miotUrl(`/mina/status?account_id=${state.accountId}&device_id=${deviceId}`);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        headers['Content-Type'] = 'application/json';
+        const resp = await fetch(url, { headers });
+        if (!resp.ok) return;
+
+        const json = await resp.json();
+        if (!json.success || !json.data) return;
+
+        const data = json.data;
+        const position = data.position ?? 0;       // 当前播放到的秒数
+        const isPlaying = data.is_playing ?? (data.state === 'playing');
+
+        // ========== 判1：/mina/status 返回的位置状态（优先） ==========
+        // 未播放中 + 位置接近结尾，或设备进入 idle 态
+        let posEnded = !isPlaying && (position >= totalDur - AUTO_NEXT_POS_END_THRESHOLD || data.state === 'idle');
+        if (posEnded) {
+          songloft.log.info(`[auto-next] pos-based: pos=${position}/${totalDur}s played=${isPlaying} idle=${data.state === 'idle'} -> advance`);
+          pushWebhookLog('speaker', `检测到章节结束 (pos=${position.toFixed(0)}s/${totalDur}s)，推送下一章`, `${state.bookTitle} #${state.chapterIndex}`, null);
+          // 位置判定已触发，不再进入时间兜底
+          // fall through to execute
+        } else {
+          console.log(`[auto-next] status: pos=${position}/${totalDur}s played=${isPlaying} idle=${data.state === 'idle'}`);
+
+          // ========== 判2：时间兜底（防止 miMusic 一直返回 playing 不更新状态） ==========
+          const pushedAt = autoNextPushedAt[state.bookId + '_' + deviceId];
+          if (pushedAt) {
+            const elapsedSec = (Date.now() - pushedAt) / 1000;
+            const threshold = totalDur + AUTO_NEXT_TIME_TOLERANCE; // 总时长 + 缓冲秒数
+            if (elapsedSec >= threshold) {
+              timedOut = true;
+              songloft.log.info(`[auto-next] timer-based: elapsed=${elapsedSec.toFixed(0)}s dur=${totalDur}s -> advance`);
+              pushWebhookLog('speaker', `计时判定章节结束 (${elapsedSec.toFixed(0)}s/${threshold.toFixed(0)}s)，推送下一章`, `${state.bookTitle} #${state.chapterIndex}`, null);
+            }
+          }
+        }
+
+        // 任一判定触发 → 切换下一章
+        if (!posEnded && !timedOut) return; // 还未到切换时机
+
+        if (posEnded) {
+          songloft.log.info(`[auto-next] pos-triggered -> next chapter`);
+        } else {
+          songloft.log.info(`[auto-next] timer-triggered -> next chapter`);
+        }
+
+        const detail = bm.getBookById(state.bookId);
+        if (detail) {
+          const curCh = detail.chapters.find(c => c.id === state.chapterId);
+          if (curCh) {
+            const nextIdx = curCh.index + 1;
+            if (nextIdx < detail.chapters.length) {
+              const nextCh = detail.chapters.find(c => c.index === nextIdx);
+              if (nextCh) {
+                songloft.log.info(`[auto-next] -> "${detail.title}" #${curCh.index} -> #${nextIdx}`);
+                const pushOk = await pushChapterToMiot(bm, accountId, deviceId, detail, nextCh, 0);
+                updateDeviceSession(accountId, deviceId, detail.id, nextCh.id, nextIdx, detail.title);
+                autoNextState[deviceId] = { accountId, bookId: detail.id, chapterId: nextCh.id, chapterIndex: nextIdx, bookTitle: detail.title };
+                if (pushOk) {
+                  pushWebhookLog('speaker', '自动下一章推送成功', `${detail.title} ${nextCh.title}`, '✅');
+                }
+              }
+            } else {
+              pushWebhookLog('speaker', '自动下一集已结束', `${detail.title} 已达最后一集`, null);
+              songloft.log.info('[auto-next] reached last chapter');
+              stopAutoNext(deviceId);
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    } catch {
+      // 网络错误静默忽略
+    }
+  }, 3000);
+
+  autoNextTimers[deviceId] = poll as any;
 }
 
 /** 在 BookManager 缓存中通过标题子串匹配查找书籍 */

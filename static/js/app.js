@@ -12,6 +12,11 @@ import { escapeHtml, showToast } from './utils.js';
 let logEntries = [];
 let _logPollTimer = null;
 
+/** 判断用户是否已经滚到底部（差值小于等于30px） */
+function isAtBottom(el) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= 30;
+}
+
 function toggleLogPanel() {
   const panel = document.getElementById('logPanel');
   if (!panel) return;
@@ -19,8 +24,8 @@ function toggleLogPanel() {
   if (!isOpen) {
     panel.classList.add('open');
     fetchLogs();
-    // 每 5s 轮询刷新
-    _logPollTimer = setInterval(fetchLogs, 5000);
+    // 每 3s 轮询刷新
+    _logPollTimer = setInterval(fetchLogs, 3000);
   } else {
     panel.classList.remove('open');
     if (_logPollTimer) { clearInterval(_logPollTimer); _logPollTimer = null; }
@@ -40,14 +45,14 @@ async function fetchLogs() {
     if (!res.ok) return;
     const json = await res.json();
     if (json?.success && Array.isArray(json.data)) {
-      // 直接覆盖上次快照，避免增量追加产生重复
+      const prevLen = logEntries.length;
       logEntries = json.data.slice();
-      renderLogs();
+      renderLogs(prevLen);
     }
   } catch { /* ignore */ }
 }
 
-function renderLogs() {
+function renderLogs(prevLen) {
   const body = document.getElementById('logPanelBody');
   const countEl = document.getElementById('logCount');
   if (!body || !countEl) return;
@@ -58,30 +63,60 @@ function renderLogs() {
     return;
   }
 
-  let html = '';
-  for (let i = 0; i < logEntries.length; i++) {
-    const e = logEntries[i];
-    const d = new Date(e.time);
-    const ts = d.getHours().toString().padStart(2, '0') + ':' +
-               d.getMinutes().toString().padStart(2, '0') + ':' +
-               d.getSeconds().toString().padStart(2, '0');
-    const iconMap = { voice: '🎤', error: '❌', speaker: '📌', sys: 'ℹ️' };
-    const icon = iconMap[e.type] || '📌';
-    const rCls = e.result === '✅' ? 'le-ok' : (e.result === '❌' ? 'le-fail' : '');
-    const rText = e.result || '';
+  // ---------- 增量追加新条目（不重建 DOM）----------
+  const isNewEntry = logEntries.length > prevLen;
+  if (isNewEntry) {
+    const fragment = document.createDocumentFragment();
+    for (let i = prevLen; i < logEntries.length; i++) {
+      const e = logEntries[i];
+      const d = new Date(e.time);
+      const ts = String(d.getHours()).padStart(2, '0') + ':' +
+                 String(d.getMinutes()).padStart(2, '0') + ':' +
+                 String(d.getSeconds()).padStart(2, '0');
+      const iconMap = { voice: '🎤', error: '❌', speaker: '📌', sys: 'ℹ️' };
+      const icon = iconMap[e.type] || '📌';
+      const rCls = e.result === '✅' ? 'le-ok' : (e.result === '❌' ? 'le-fail' : '');
+      const rText = e.result || '';
 
-    html += '<div class="log-entry type-' + (e.type || 'speaker') + '">' +
-            '<span class="le-time">' + ts + '</span>' +
-            '<span class="le-icon">' + icon + '</span>' +
-            escapeHtml(String(e.action || '')) + ' ' +
-            escapeHtml(String(e.detail || '')) +
-            '<span class="le-result ' + rCls + '">' + rText + '</span>' +
-            '</div>';
+      const div = document.createElement('div');
+      div.className = 'log-entry type-' + (e.type || 'speaker');
+      div.innerHTML = '<span class="le-time">' + ts + '</span>' +
+                      '<span class="le-icon">' + icon + '</span>' +
+                      escapeHtml(String(e.action || '')) + ' ' +
+                      escapeHtml(String(e.detail || '')) +
+                      '<span class="le-result ' + rCls + '">' + rText + '</span>';
+      fragment.appendChild(div);
+    }
+    body.appendChild(fragment);
+  } else {
+    // 完全清空重建（首次或无增量时）
+    let html = '';
+    for (let i = 0; i < logEntries.length; i++) {
+      const e = logEntries[i];
+      const d = new Date(e.time);
+      const ts = String(d.getHours()).padStart(2, '0') + ':' +
+                 String(d.getMinutes()).padStart(2, '0') + ':' +
+                 String(d.getSeconds()).padStart(2, '0');
+      const iconMap = { voice: '🎤', error: '❌', speaker: '📌', sys: 'ℹ️' };
+      const icon = iconMap[e.type] || '📌';
+      const rCls = e.result === '✅' ? 'le-ok' : (e.result === '❌' ? 'le-fail' : '');
+      const rText = e.result || '';
+
+      html += '<div class="log-entry type-' + (e.type || 'speaker') + '">' +
+              '<span class="le-time">' + ts + '</span>' +
+              '<span class="le-icon">' + icon + '</span>' +
+              escapeHtml(String(e.action || '')) + ' ' +
+              escapeHtml(String(e.detail || '')) +
+              '<span class="le-result ' + rCls + '">' + rText + '</span>' +
+              '</div>';
+    }
+    body.innerHTML = html;
   }
-  body.innerHTML = html;
-  // 滚动到底部（仅最后一条变化时自动滚）
-  const prevScroll = body.scrollHeight - body.scrollTop;
-  body.scrollTop = body.scrollHeight;
+
+  // 仅当用户在底部时才自动滚动
+  if (isAtBottom(body)) {
+    body.scrollTop = body.scrollHeight;
+  }
 
   countEl.textContent = '共 ' + logEntries.length + ' 条';
 }

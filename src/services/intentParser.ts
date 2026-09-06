@@ -16,10 +16,16 @@ const CN_TO_ARABIC: Record<string, number> = {
 const NEXT_EPISODE_KEYWORDS = ['下一集', '下一章', '下一段', '下一节', '下一回'];
 const PREV_EPISODE_KEYWORDS = ['上一集', '上一章', '上一段', '上一节', '上一回'];
 
+/** 停止播放关键词（参考 miot-plus 默认配置） */
+const STOP_KEYWORDS = [
+  '暂停播放', '停止播放', '暂停', '停一下', 'pause', 'stop', '停止',
+  '别播了', '关掉', '关机', '关闭', '暂停', '休眠', '休息',
+];
+
 // ===== 类型定义 =====
 
 export interface ParseResult {
-  /** 意图类型 */
+  /** 意图类型：PLAY_BOOK / PLAY_EPISODE / NEXT_EPISODE / PREV_EPISODE / STOP */
   intent: string;
   /** 书籍标题（空串表示未知或后续章节操作） */
   bookTitle: string;
@@ -110,6 +116,13 @@ export function parseIntent(query: string): ParseResult | null {
   for (const kw of PREV_EPISODE_KEYWORDS) {
     if (trimmed.includes(kw)) {
       return { intent: 'PREV_EPISODE', bookTitle: '', chapterIndex: null, relativeOffset: -1, rawQuery: trimmed };
+    }
+  }
+
+  // Step 1b: 判断是否为停止播放（不需要书名）
+  for (const kw of STOP_KEYWORDS) {
+    if (trimmed.includes(kw)) {
+      return { intent: 'STOP', bookTitle: '', chapterIndex: null, relativeOffset: null, rawQuery: trimmed };
     }
   }
 
